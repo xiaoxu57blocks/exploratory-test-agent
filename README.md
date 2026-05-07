@@ -2,13 +2,14 @@
 
 A Claude Code-powered agent that turns Linear tickets into executed E2E tests — and only after a test actually passes does it generate a Playwright `.spec.ts`.
 
-You give it ticket IDs. It fetches them, decides which need testing, plans each one, **drives a real Chrome via the Chrome DevTools MCP** to run the test, then posts results back to Linear. Generated Playwright code is a *recording of a known-working path*, not a guess written ahead of time.
+You give it ticket IDs. It fetches them, decides which need testing, plans each one, **drives a real Chrome via the Chrome DevTools MCP** to run the test, then posts results back to Linear. Generated Playwright code is a _recording of a known-working path_, not a guess written ahead of time.
 
 ## How to use it
 
 ### 1. One-time setup
 
 Prereqs:
+
 - Node 20+ (for `npx mcp-remote`)
 - [Claude Code](https://claude.com/claude-code) installed
 - Chrome installed locally (the executor launches it via Chrome DevTools MCP)
@@ -42,6 +43,7 @@ Inside the repo, start a Claude session and trigger the pipeline:
 Defaults to **prod**. Use `--env=stg` to switch. Natural language works too — `测试 SUP-7152, SUP-7497` is treated the same.
 
 The agent will pause for **user confirmation** twice in the typical run:
+
 1. After triage, when any ticket is medium/low confidence or its user role can't be inferred
 2. After execution, before reporting back to Linear, so you can review screenshots and the generated spec
 
@@ -71,11 +73,11 @@ Generated specs stay local until you say so. After reviewing `generated.spec.ts`
 
 That copies the spec into your `portal-ui-automation` clone, adapts it to that repo's `pages/` + fixtures structure, and creates a branch. **It never pushes** — you review the diff and `git push` yourself.
 
-## Design思路
+## Design
 
 A few decisions that shape the whole pipeline:
 
-**LLM-driven execution beats pre-written selectors.** A subagent looking at the actual page (DOM snapshot + screenshot) can decide the next click on the fly. That's far more robust to UI variation than a Playwright file written ahead of time against assumptions about the DOM. So the agent *executes first*, in a real browser, and only writes Playwright code from the trace of what worked.
+**LLM-driven execution beats pre-written selectors.** A subagent looking at the actual page (DOM snapshot + screenshot) can decide the next click on the fly. That's far more robust to UI variation than a Playwright file written ahead of time against assumptions about the DOM. So the agent _executes first_, in a real browser, and only writes Playwright code from the trace of what worked.
 
 **Playwright is the artifact, not the runtime.** The trace captured during execution is translated to `.spec.ts` only after **all `[primary]` scenarios pass**. What gets archived is therefore a recording of a known-working path. A failing run produces screenshots, a result file, and a Linear comment — but no spec, because a broken recording is worse than no recording.
 
