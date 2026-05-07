@@ -38,5 +38,18 @@
       "Write($PORTAL_REPO_PATH/**)"
     ]
   },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/log-intervention.sh"
+          }
+        ]
+      }
+    ]
+  },
   "env": {}
 }
