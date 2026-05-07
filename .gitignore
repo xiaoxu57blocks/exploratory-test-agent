@@ -1,0 +1,28 @@
+# Run artifacts — local working state, never commit
+artifacts/
+
+# Local-only settings overrides
+.claude/settings.local.json
+.claude/test-env.local.json
+
+# Env files
+.env
+.env.local
+*.local
+
+# OS / editor noise
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Node (if any tooling lands later)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Logs
+*.log

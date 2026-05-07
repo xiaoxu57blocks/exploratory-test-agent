@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "enabledMcpjsonServers": [
+    "linear",
+    "chrome-devtools"
+  ],
+  "permissions": {
+    "allow": [
+      "mcp__linear__*",
+      "mcp__chrome-devtools__*",
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Bash(./scripts/*.sh:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(jq:*)",
+      "Bash(mkdir:*)",
+      "Bash(date:*)",
+      "Bash(git:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(rg:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(file:*)",
+      "Bash(which:*)",
+      "Bash(stat:*)",
+      "Bash(echo:*)",
+      "Bash(pwd:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(npm test:*)",
+      "Bash(rm:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Write($PORTAL_REPO_PATH/**)"
+    ]
+  },
+  "env": {}
+}

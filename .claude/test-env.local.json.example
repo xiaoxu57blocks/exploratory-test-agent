@@ -1,0 +1,31 @@
+{
+  "default_env": "prod",
+  "environments": {
+    "stg": {
+      "url": "https://stg.example.com",
+      "accounts": {
+        "internal": {
+          "username": "qa-internal-stg@example.com",
+          "password": "REPLACE_ME"
+        },
+        "external": {
+          "username": "qa-external-stg@example.com",
+          "password": "REPLACE_ME"
+        }
+      }
+    },
+    "prod": {
+      "url": "https://app.example.com",
+      "accounts": {
+        "internal": {
+          "username": "qa-internal-prod@example.com",
+          "password": "REPLACE_ME"
+        },
+        "external": {
+          "username": "qa-external-prod@example.com",
+          "password": "REPLACE_ME"
+        }
+      }
+    }
+  }
+}
