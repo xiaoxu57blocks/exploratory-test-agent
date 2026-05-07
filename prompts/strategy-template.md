@@ -21,7 +21,10 @@ Fill in every section. If a section has no content, write `_None._` — do not o
 
 - **Environment**: `prod` | `stg` (the executor reads URL from `.claude/test-env.local.json`)
 - **User role**: `external` | `internal` (the executor reads credentials from `.claude/test-env.local.json` for this role)
-- **Feature flags**: <flag-name = expected-value> _(or `<unknown>` if ticket doesn't specify)_
+- **Feature flags** _(one bullet per flag — read by `test-executor`'s pre-flight; keep the format strict)_:
+  - `feature-<name>` — `enable_required` (gates: <what it gates per the diff>)
+  - `feature-<other>` — `must_be_off` (kill-switch / cleanup gate)
+  - If unsure: list the flag in **Open questions** instead of guessing. Do not write `<unknown>` here — the pre-flight cannot act on unknowns.
 - **Data setup**: <case state, files uploaded, role assignments — anything the test must seed before the user actions begin>
 - **External systems**: <if connectors required: SmartAdvocate, OneDrive, Litify, etc.>
 
@@ -91,7 +94,10 @@ Scenarios are written for an LLM-driven executor — describe **observable user 
 This is where you put uncertainty. The orchestrator will pause and ask the user. Use it for:
 - Missing acceptance criteria
 - Ambiguous expected behavior
-- Unspecified feature flag values
+- A feature flag the linked PRs reference but whose effect on the surface under test is unclear
 - Role assumption that needs confirmation
 
 Do NOT use it for things you should have figured out (e.g. "what test environment should we use" — that's a precondition).
+
+### Feature flags — where they come from
+The strategist reads each linked GitHub PR via the Linear MCP (`mcp__linear__get_diff` / `mcp__linear__get_diff_threads`) and greps the diff for `feature-*`, `feature_*`, `isFeatureFlagEnabled("…")`, `enabledFeatureFlags`. Every flag found in the diff that gates a code path on the test surface goes into Preconditions. Flags merely *referenced* by adjacent code (e.g. an unrelated kill-switch) belong in Open questions, not Preconditions.

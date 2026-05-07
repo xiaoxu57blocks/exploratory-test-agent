@@ -65,6 +65,30 @@ Never take a screenshot or assert immediately after a navigation/click without f
 - After each scenario, reset to a clean state (navigate to the env's base URL or close+reopen the page) — scenarios must not leak state into each other.
 - On unrecoverable error, take a final screenshot, write what you know to `result.json`, and exit. Do not silently retry forever.
 
+### Feature flag pre-flight (run after login, before any scenario)
+
+Supio's portal has a runtime flag-sync gap: backend `me.enabled_feature_flags` may already include a flag, but the React store only honors it after a local override appears in `localStorage.enabledFeatureFlags`. Skipping pre-flight will cause the UI to silently render the *pre-feature* path and produce false-negative scenario failures.
+
+For every flag listed under `Preconditions → Feature flags` in the spec:
+
+1. **Confirm the backend has it enabled** — POST to `https://api.supio.com/api/v1/base` with the GraphQL query `query me { me { id email enabled_feature_flags } }` (use the page's existing session cookie via `evaluate_script` + `fetch(..., { credentials: 'include' })`). If the directive is `enable_required` and the flag is missing from the backend response, abort the run with a clear message — the test account is not entitled to the feature and the run will not be meaningful.
+2. **Force the runtime override** — read `localStorage.enabledFeatureFlags` (comma-separated). If any required flag is missing from that string, write the union back via `evaluate_script`:
+   ```js
+   () => {
+     const have = (localStorage.getItem('enabledFeatureFlags') || '').split(',').filter(Boolean);
+     const need = ['feature-foo', 'feature-bar']; // from spec
+     localStorage.setItem('enabledFeatureFlags', Array.from(new Set([...have, ...need])).join(','));
+     return localStorage.getItem('enabledFeatureFlags');
+   }
+   ```
+   For `must_be_off` directives, remove the flag from the same string.
+3. **Reload the page** with `navigate_page({type:"reload"})` and re-confirm load per the page-load rules. The override is what the React store reads on first paint — without a reload, gated UI sections will not appear.
+4. **Record one trace entry per flag** with `{"t":"feature_flag_preflight","flag":"feature-foo","backend_enabled":true,"runtime_override":"applied|already_present","outcome":"on"}`.
+
+Fallback if backend GraphQL is unreachable: open the in-app dev flag panel (avatar → coffee-cup icon, label `rest`), search for the flag, and toggle it on. Record the trace entry with `method: "dev_panel_toggle"`. Use this only when the GraphQL path fails — the localStorage path is deterministic and screenshot-able; the UI path adds page state that's harder to reason about.
+
+Never proceed to scenarios with missing required flags. Better to abort with a clear error than to run scenarios that will fail for the wrong reason.
+
 ### Scenario execution
 
 For each scenario in the spec, in order:
@@ -92,10 +116,11 @@ Do not attempt to "improve" the trace with branches, retries, or assertions that
 1. Read the spec. Verify env + role; load creds from `.claude/test-env.local.json`. Abort early on missing config.
 2. Initialize the Chrome DevTools MCP session and navigate to the env's base URL.
 3. Log in once with the role from preconditions. Capture a `login_as` trace entry.
-4. For each scenario, execute and evaluate per the rules above.
-5. After all scenarios, write `result.json` with per-scenario outcomes and a top-level `passed_primary` boolean.
-6. If `passed_primary` is true, generate `generated.spec.ts` from the trace.
-7. Return a one-paragraph summary to the orchestrator: total scenarios, pass/fail breakdown, whether `generated.spec.ts` was created, and the path to the run dir.
+4. Run the **Feature flag pre-flight** (above) for every flag listed in the spec's Preconditions. Abort if any `enable_required` flag is missing from the backend.
+5. For each scenario, execute and evaluate per the rules above.
+6. After all scenarios, write `result.json` with per-scenario outcomes and a top-level `passed_primary` boolean.
+7. If `passed_primary` is true, generate `generated.spec.ts` from the trace.
+8. Return a one-paragraph summary to the orchestrator: total scenarios, pass/fail breakdown, whether `generated.spec.ts` was created, and the path to the run dir.
 
 ## Anti-patterns
 
