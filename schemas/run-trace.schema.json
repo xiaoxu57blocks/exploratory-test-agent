@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Run trace (executor stream)",
+  "description": "JSONL \u2014 one object per line. The executor appends one entry per observable step or assertion so the run is auditable after the fact and so generated.spec.ts can be derived from a known-working path. Validator runs line-by-line.",
+  "type": "object",
+  "required": [
+    "ts",
+    "event"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp of the step."
+    },
+    "event": {
+      "type": "string",
+      "description": "Event kind. Common values: run_start, run_end, navigate, click, fill, select_radio, type_text, press_key, upload_file, wait_for, evaluate_script, take_snapshot, screenshot, resize, reload, observe, measure, network_observe, network_response, scenario_start, scenario_pass, scenario_fail, scenario_not_run, assert, feature_flag_check, feature_flag_preflight, login_as, clear_localstorage, component_identity_verified, case_fitness_check, live_update_finding."
+    }
+  },
+  "allOf": [
+    {
+      "description": "scenario_* events require id+kind+(title|reason).",
+      "if": {
+        "properties": {
+          "event": {
+            "enum": [
+              "scenario_start",
+              "scenario_pass",
+              "scenario_fail",
+              "scenario_not_run"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "description": "scenario_fail must include a reason.",
+      "if": {
+        "properties": {
+          "event": {
+            "const": "scenario_fail"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ]
+      }
+    },
+    {
+      "description": "navigate events name the URL.",
+      "if": {
+        "properties": {
+          "event": {
+            "const": "navigate"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "description": "screenshot events name a path.",
+      "if": {
+        "properties": {
+          "event": {
+            "const": "screenshot"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "description": "live_update_finding rows mirror the result.json field's shape so the executor can append them as it observes them and the reporter can pick them up either way.",
+      "if": {
+        "properties": {
+          "event": {
+            "const": "live_update_finding"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "title",
+          "observation"
+        ]
+      }
+    }
+  ]
+}

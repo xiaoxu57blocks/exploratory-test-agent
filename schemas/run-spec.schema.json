@@ -1,0 +1,249 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Requirement Spec sidecar",
+  "description": "Machine-readable mirror of artifacts/<run-id>/03-spec-<unit_id>.md. The strategist writes both files; the markdown is for human review and the JSON is what the executor parses. They must agree \u2014 when scenarios diverge between the two, the JSON wins (the validator tells the strategist to re-emit).",
+  "type": "object",
+  "required": [
+    "run_id",
+    "unit_id",
+    "tickets",
+    "title",
+    "scope_summary",
+    "preconditions",
+    "scenarios"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "unit_id": {
+      "type": "string",
+      "pattern": "^unit-\\d+$"
+    },
+    "tickets": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]+-\\d+$"
+      },
+      "minItems": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope_summary": {
+      "type": "string",
+      "description": "2-4 sentences of context. Same prose as the markdown's Scope summary section."
+    },
+    "preconditions": {
+      "type": "object",
+      "required": [
+        "env",
+        "user_role"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "env": {
+          "enum": [
+            "prod",
+            "stg"
+          ]
+        },
+        "user_role": {
+          "enum": [
+            "external",
+            "internal"
+          ]
+        },
+        "feature_flags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "directive"
+            ],
+            "additionalProperties": true,
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]*$"
+              },
+              "directive": {
+                "enum": [
+                  "enable_required",
+                  "must_be_off"
+                ]
+              },
+              "gates": {
+                "type": "string",
+                "description": "Free text: what the flag controls per the diff."
+              }
+            }
+          }
+        },
+        "data_setup": {
+          "type": "string",
+          "description": "Plain text. References to fixture files or seeded cases live here. The /create-case skill consumes this section when the spec demands a fresh case."
+        },
+        "component_under_test": {
+          "type": "object",
+          "description": "Pinned component identity from the PR diff \u2014 the executor's Component identity verification step uses this.",
+          "properties": {
+            "data_testid": {
+              "type": "string"
+            },
+            "selector": {
+              "type": "string",
+              "description": "Alternate unique selector if data-testid isn't available."
+            },
+            "mount_file": {
+              "type": "string",
+              "description": "e.g. src/packages/ai-artifact-first/components/ArtifactFirstTimeline.tsx"
+            }
+          }
+        },
+        "visibility_gates": {
+          "type": "array",
+          "description": "Each gate the diff puts on the component's render path beyond the obvious feature flag. Lifted into Given clauses so the executor doesn't fail a scenario because a gate is closed.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "where_in_diff",
+              "default_state"
+            ],
+            "additionalProperties": true,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "where_in_diff": {
+                "type": "string"
+              },
+              "default_state": {
+                "enum": [
+                  "open",
+                  "closed",
+                  "unknown"
+                ]
+              },
+              "how_to_open": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "given",
+          "when",
+          "then"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "string",
+                "pattern": "^s?\\d+$"
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "primary",
+              "edge",
+              "skip"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "given": {
+            "type": "string",
+            "minLength": 1
+          },
+          "when": {
+            "type": "string",
+            "minLength": 1
+          },
+          "then": {
+            "type": "string",
+            "minLength": 1
+          },
+          "related_tickets": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z]+-\\d+$"
+            }
+          },
+          "skip_reason": {
+            "type": "string",
+            "description": "Required when kind='skip' (validator enforces). Why this scenario is intentionally not exercised this run."
+          },
+          "diff_anchor": {
+            "type": "string",
+            "description": "Optional \u2014 file:line in the PR where the asserted behavior is implemented. Helps reviewers cross-check that the scenario is grounded in code."
+          }
+        }
+      }
+    },
+    "out_of_scope": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Behaviors the spec deliberately doesn't cover, with one short reason per item."
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Things the strategist couldn't resolve from ticket+diff. Surfaced by the orchestrator before invoking executor."
+    }
+  },
+  "allOf": [
+    {
+      "description": "skip-kind scenarios must have a skip_reason.",
+      "type": "object",
+      "properties": {
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "skip"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "skip_reason"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

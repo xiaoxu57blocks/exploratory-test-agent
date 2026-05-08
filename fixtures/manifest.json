@@ -1,0 +1,34 @@
+{
+  "_comment": "Manifest of fixture files for /create-case. Each entry maps a fixture display name to its Google Drive file id inside the team's Supio QA shared drive (drive id 0ABN1KXZHE2OUUk9PVA, AUTO subfolder 1-KrKSmynJ_KhqSYstEttxrw6RnqHsmDq). The /create-case skill consults this when populating a new case. Entries are downloaded on demand via scripts/google-drive.py (OAuth, drive.readonly) into fixtures/cache/ (gitignored). Add new entries when a PR introduces a behavior the existing fixtures don't exercise; the covers_event_types annotation tells future scenario design which Drive file produces which timeline event types.",
+
+  "Police Report.Pdf": {
+    "drive_file_id": "1CL2D95mKBRsj8yYKAHURuQZtFcekFYfh",
+    "covers_event_types": ["incident", "police_report"],
+    "notes": "Canonical police-report fixture used as a default for /create-case. ~2.8 MB."
+  },
+  "MRnMB.pdf": {
+    "drive_file_id": "1lYeiNiV5xbF8bxumF3TCM_ZGAbwmTiIM",
+    "covers_event_types": ["medical_record", "medical_bill", "treatment"],
+    "notes": "Combined Medical Records + Medical Bills fixture. Default for /create-case alongside Police Report.Pdf — together they cover incident + medical record + medical bill event types. ~1 MB."
+  },
+  "Medication.pdf": {
+    "drive_file_id": "12kJx9vEEbMDdxYbePwxR1ugQme6j5Bxd",
+    "covers_event_types": ["medication", "treatment"],
+    "notes": "Medication-specific fixture. Use --add when a scenario asserts on medication events distinct from the broader medical-record bucket. ~4.4 MB."
+  },
+  "Incident_Report.pdf": {
+    "drive_file_id": "1b8cniR_GUCHtwaGLH5aF7SPCxCwS-H92",
+    "covers_event_types": ["incident", "police_report"],
+    "notes": "Smaller stand-in for police_report (~348 KB, 4 pages). Kept for legacy run-id 2026-05-08_1524_SUP-7623; new specs should prefer 'Police Report.Pdf'."
+  },
+  "MedicalRecords.pdf": {
+    "drive_file_id": "1BXP7YJl-falqPfXxB1kzn8J-MCsRnhkI",
+    "covers_event_types": ["medical_record", "treatment"],
+    "notes": "Smaller stand-in for medical-record fixture (~752 KB, 16 pages). Kept for legacy run-id 2026-05-08_1524_SUP-7623; new specs should prefer 'MRnMB.pdf'."
+  },
+  "bill UMPC.pdf": {
+    "drive_file_id": "1_hhY15qTk3hcFJ9iaof3WKPdrt8jxQX2",
+    "covers_event_types": ["medical_bill"],
+    "notes": "Standalone medical-bill fixture. Use --add when a scenario needs a discrete bill event distinct from MRnMB's combined coverage."
+  }
+}

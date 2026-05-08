@@ -8,10 +8,12 @@
     "allow": [
       "mcp__linear__*",
       "mcp__chrome-devtools__*",
-      "Read(./**)",
-      "Write(./**)",
-      "Edit(./**)",
-      "Bash(./scripts/*.sh:*)",
+      "mcp__github__*",
+      "Read($CLAUDE_PROJECT_DIR/**)",
+      "Write($CLAUDE_PROJECT_DIR/**)",
+      "Edit($CLAUDE_PROJECT_DIR/**)",
+      "Bash($CLAUDE_PROJECT_DIR/scripts/*.sh:*)",
+      "Bash($CLAUDE_PROJECT_DIR/scripts/*.py:*)",
       "Bash(ls:*)",
       "Bash(cat:*)",
       "Bash(jq:*)",
@@ -29,13 +31,20 @@
       "Bash(stat:*)",
       "Bash(echo:*)",
       "Bash(pwd:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(python3:*)",
+      "Bash(chmod:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(touch:*)",
       "Bash(npx playwright test:*)",
       "Bash(npm test:*)",
       "Bash(rm:*)"
     ],
     "ask": [
       "Bash(git push:*)",
-      "Write($PORTAL_REPO_PATH/**)"
+      "Write($PLAYWRIGHT_REPO_PATH/**)"
     ]
   },
   "hooks": {

@@ -32,11 +32,25 @@ Execute these phases in order. **Announce each agent invocation before calling i
 
 Invoke the `linear-fetcher` agent with the ticket list and run-id.
 
-After it returns, verify `artifacts/<run-id>/01-fetch.json` exists. If any tickets errored (in `errors[]`), tell the user and ask whether to continue with the rest.
+After it returns, **run pre-flight check** before proceeding:
+
+```bash
+scripts/check-phase.py --run-id <run-id> --phase fetch
+```
+
+If it exits non-zero, stop and surface the error to the user — the fetcher claimed done but didn't write what it owes. If any tickets errored (in `errors[]`), tell the user and ask whether to continue with the rest.
 
 ### Phase 2 — Triage
 
 Invoke the `test-triage` agent with the run-id.
+
+After it returns:
+
+```bash
+scripts/check-phase.py --run-id <run-id> --phase triage
+```
+
+Stop on non-zero exit.
 
 After it returns, **read `02-triage.json` yourself** and present a summary table to the user:
 
@@ -62,7 +76,12 @@ For each test unit that survived triage:
 
 1. Announce: "Generating spec for unit-X covering SUP-NNN, SUP-MMM (env=<env>, role=<role>)"
 2. Invoke the `test-strategist` agent with the run-id, unit_id, env, and role.
-3. After it returns, briefly show the user the generated spec's title, scenario count, and any open questions.
+3. After it returns:
+   ```bash
+   scripts/check-phase.py --run-id <run-id> --phase spec --unit <unit_id>
+   ```
+   This validates both the markdown and the JSON sidecar exist and that the sidecar conforms to `schemas/run-spec.schema.json`. Stop on non-zero exit — the strategist's output is the executor's only input, so a malformed spec must not pass through.
+4. Briefly show the user the generated spec's title, scenario count, and any open questions.
 
 Run units **sequentially**, not in parallel — strategist has shared filesystem state (the artifacts dir).
 
@@ -72,7 +91,12 @@ For each confirmed unit:
 
 1. Announce: "Executing unit-X via Chrome DevTools MCP"
 2. Invoke the `test-executor` agent with run-id, unit_id, env, and role.
-3. After it returns, show the user a one-line status (PASS/FAIL/error) plus the path to `04-run-<unit_id>/result.json` and `generated.spec.ts` if produced.
+3. After it returns:
+   ```bash
+   scripts/check-phase.py --run-id <run-id> --phase execute --unit <unit_id>
+   ```
+   This validates `result.json` and `trace.jsonl` against their schemas. The executor is supposed to self-validate before declaring done; this is defense in depth. If validation fails, surface the errors and ask the user whether to retry the executor or skip this unit.
+4. Show the user a one-line status (PASS/FAIL/error) plus the path to `04-run-<unit_id>/result.json` and `generated.spec.ts` if produced.
 
 Run units **sequentially**. Do not parallelize — they share a Chrome session.
 

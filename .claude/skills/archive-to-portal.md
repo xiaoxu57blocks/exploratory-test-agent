@@ -1,6 +1,6 @@
 ---
 name: archive-to-portal
-description: Manually archive a passing test from a run's artifacts to the portal-ui-automation repo. Usage `/archive-to-portal <run-id>/<unit-id>`. Adapts the generated.spec.ts to portal's conventions and creates a branch in $PORTAL_REPO_PATH. Never auto-pushes — the user reviews and pushes themselves.
+description: Manually archive a passing test from a run's artifacts to the portal-ui-automation repo. Usage `/archive-to-portal <run-id>/<unit-id>`. Adapts the generated.spec.ts to portal's conventions and creates a branch in $PLAYWRIGHT_REPO_PATH. Never auto-pushes — the user reviews and pushes themselves.
 ---
 
 # /archive-to-portal
@@ -19,13 +19,13 @@ Before invoking the archiver agent, sanity check yourself:
 
 1. The path `artifacts/<run-id>/04-run-<unit-id>/generated.spec.ts` exists.
 2. The path `artifacts/<run-id>/04-run-<unit-id>/result.json` exists and contains `"passed_primary": true`. If not, refuse — the user can pass `--force` to override (and you must surface a warning if they do).
-3. `$PORTAL_REPO_PATH` is set and points to a git repo.
+3. `$PLAYWRIGHT_REPO_PATH` is set and points to a git repo.
 
 If any check fails, print a clear error and stop. Do not proceed.
 
 ## Workflow
 
-1. Announce: "Archiving <unit-id> to portal repo at `$PORTAL_REPO_PATH`"
+1. Announce: "Archiving <unit-id> to portal repo at `$PLAYWRIGHT_REPO_PATH`"
 2. Invoke the `portal-archiver` agent with the run-id and unit-id.
 3. Surface its summary verbatim. Do not paraphrase the branch name, file path, or next-step commands.
 
@@ -39,5 +39,5 @@ If any check fails, print a clear error and stop. Do not proceed.
 ## Anti-patterns
 
 - ❌ Inferring the run-id/unit-id from "the most recent run" if the user didn't specify
-- ❌ Editing files in `$PORTAL_REPO_PATH` outside of the archiver
+- ❌ Editing files in `$PLAYWRIGHT_REPO_PATH` outside of the archiver
 - ❌ Running `npx playwright test` after archival "to verify it works" — the user will do that

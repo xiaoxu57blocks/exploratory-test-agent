@@ -1,104 +1,171 @@
 # exploratory-test-agent
 
-A Claude Code-powered agent that turns Linear tickets into executed E2E tests — and only after a test actually passes does it generate a Playwright `.spec.ts`.
+> **Turn Linear tickets into executed E2E tests, then archive the recording — not the guess.**
 
-You give it ticket IDs. It fetches them, decides which need testing, plans each one, **drives a real Chrome via the Chrome DevTools MCP** to run the test, then posts results back to Linear. Generated Playwright code is a _recording of a known-working path_, not a guess written ahead of time.
+An LLM-driven exploratory testing agent that takes ticket IDs, drives a real browser end-to-end against your app, and only after a test actually passes does it generate a Playwright `.spec.ts`. The generated spec is therefore a **recording of a known-working path**, not pre-written selectors against assumptions.
 
-## How to use it
+Built on [Claude Code](https://claude.com/claude-code) using its agent + skill primitives. Writes a comment back to each Linear ticket with screenshots and a result summary.
 
-### 1. One-time setup
+> **Status: POC.** Run small batches, review every stage, expect the agent to ask before doing anything irreversible.
 
-Prereqs:
+---
 
-- Node 20+ (for `npx mcp-remote`)
-- [Claude Code](https://claude.com/claude-code) installed
-- Chrome installed locally (the executor launches it via Chrome DevTools MCP)
-- Linear access; `portal-ui-automation` cloned somewhere on disk if you plan to archive tests
+## Why this exists
 
-Copy and fill the two local config files (both gitignored):
+Traditional Playwright suites are written **ahead of time** against assumptions about the DOM. They break the moment the UI shifts and need constant maintenance. They also don't help you triage a ticket — they tell you whether a known flow still works, not whether _this specific change_ in PR #1234 actually does what the ticket said it would.
 
-```bash
-cp .claude/settings.local.json.example .claude/settings.local.json
-cp .claude/test-env.local.json.example .claude/test-env.local.json
-```
+This agent flips both:
 
-In [.claude/settings.local.json](.claude/settings.local.json) set `PORTAL_REPO_PATH` to your local clone of [portal-ui-automation](https://github.com/codeseals/portal-ui-automation).
+1. **The agent looks at the page** (DOM snapshot + screenshot) and decides the next click on the fly. UI variation is far easier to absorb at run-time than to pre-encode.
+2. **The agent reads the linked PR's diff** (via the GitHub MCP) before writing scenarios. It tests what the PR _actually shipped_, not what the ticket prose promised.
+3. **Playwright is the artifact, not the runtime.** A run translates a successful trace into `.spec.ts` only after every primary scenario passes. A failing run produces screenshots + result + Linear comment; no spec, because a broken recording is worse than no recording.
 
-In [.claude/test-env.local.json](.claude/test-env.local.json) fill in `stg` and `prod` URLs plus internal/external test accounts. **These are real credentials** — the agent reads them at run time and never echoes them to chat, logs, artifacts, or commits. Production tests run against an isolated test tenant; they do not touch real customer data.
+---
 
-Verify Linear MCP (first run prompts OAuth in your browser):
+## How it works
 
-```bash
-./scripts/verify-mcp.sh
-```
-
-### 2. Run
-
-Inside the repo, start a Claude session and trigger the pipeline:
+### Pipeline
 
 ```
-> /test-tickets SUP-7152,SUP-7497
+ticket IDs ──▶ fetch ──▶ triage ──▶ [confirm] ──▶ spec ──▶ execute ──▶ [review] ──▶ report ──▶ Linear comment
+                                                              │
+                                                       (drives Chrome
+                                                        via MCP, records
+                                                        every step)
+                                                              │
+                                                              ▼
+                                                  generated.spec.ts (only on PASS)
+                                                              │
+                                                  optional, manual:
+                                                  /archive-to-portal ──▶ <your-playwright-repo> branch
 ```
 
-Defaults to **prod**. Use `--env=stg` to switch. Natural language works too — `测试 SUP-7152, SUP-7497` is treated the same.
+### The six agents
 
-The agent will pause for **user confirmation** twice in the typical run:
+| Agent | Job | Reads | Writes |
+|---|---|---|---|
+| `linear-fetcher` | Pull ticket bodies, comments, attachments | Linear MCP | `01-fetch.json` |
+| `test-triage` | Decide test/skip per ticket; cluster into units; infer user role | `01-fetch.json` | `02-triage.json` |
+| `test-strategist` | Read each linked PR's diff and write a Requirement Spec grounded in shipped code | `02-triage.json`, GitHub MCP | `03-spec-<unit>.md` + `.json` sidecar |
+| `test-executor` | Drive Chrome step-by-step; record every action; evaluate Then-clauses | `03-spec-<unit>.json`, Chrome DevTools MCP | `trace.jsonl`, `screenshots/`, `result.json`, `generated.spec.ts` |
+| `linear-reporter` | Post a comment to each ticket with the result + screenshots | `result.json` | Linear comment |
+| `portal-archiver` | (Manual) Adapt `generated.spec.ts` to your Playwright repo's conventions on a branch | `generated.spec.ts` | branch in `<your-playwright-repo>` |
 
-1. After triage, when any ticket is medium/low confidence or its user role can't be inferred
-2. After execution, before reporting back to Linear, so you can review screenshots and the generated spec
+### Confidence gating
 
-### 3. Inspect a run
+Linear data is incomplete. Every triage decision carries a `high` / `medium` / `low` confidence and an inferred user role. Medium and low decisions, plus any ambiguous role inference, are surfaced for explicit user confirmation. **No ticket is silently skipped** — every skip carries a written reason in `02-triage.json`.
 
-Each run gets a unique directory under `artifacts/` (gitignored):
+### Schema-validated artifacts
+
+Every run lands a directory under `artifacts/<run-id>/` (gitignored). The pipeline phases hand off through files, not in-memory message passing — each artifact is JSON Schema-validated by `scripts/check-phase.py` between phases, so a malformed hand-off stops the pipeline early instead of poisoning downstream agents:
 
 ```
-artifacts/<YYYY-MM-DD_HHMM>_<first-ticket-id>/
+artifacts/<run-id>/
 ├── 01-fetch.json              # raw Linear data
-├── 02-triage.json              # test/skip decisions, confidence, reasoning
-├── 03-spec-<unit_id>.md        # Requirement Spec per test unit
-└── 04-run-<unit_id>/
-    ├── trace.jsonl             # one JSON line per executed step
-    ├── screenshots/            # PNGs at every checkpoint + on every failure
-    ├── result.json             # pass/fail per scenario
-    └── generated.spec.ts       # Playwright translation — only written if all primary scenarios passed
+├── 02-triage.json              # decisions + confidence per ticket
+├── 03-spec-<unit>.md          # Requirement Spec (human-readable)
+├── 03-spec-<unit>.json        # same spec, machine-readable (the contract executor reads)
+└── 04-run-<unit>/
+    ├── trace.jsonl            # one JSON object per step (schema-validated)
+    ├── screenshots/           # PNGs at every checkpoint + on every failure
+    ├── result.json            # pass/fail per scenario (schema-validated)
+    └── generated.spec.ts      # Playwright translation — only on PASS
 ```
 
-### 4. Archive a passing test (manual)
+Schemas live in [`schemas/`](./schemas/); the validator is `scripts/validate-artifact.py`.
 
-Generated specs stay local until you say so. After reviewing `generated.spec.ts`:
+### Reviewed archival
+
+`<your-playwright-repo>` (the canonical regression suite) stays clean: nothing lands there until you explicitly run `/archive-to-portal` and review the diff. This repo never pushes to it.
+
+### Credentials never leave the box
+
+Test creds are read once at the start of a run and kept in agent-local memory. Passwords are masked before screenshots, never appear in `trace.jsonl` / `result.json` / `generated.spec.ts` / chat. The generated spec references env-var placeholders, never inline values.
+
+---
+
+## Quickstart
+
+### Prerequisites
+
+- [Claude Code](https://claude.com/claude-code)
+- Node 20+ (for `npx mcp-remote`)
+- Python 3.11+ (helper scripts; stdlib only)
+- Chrome
+- Linear workspace + tickets to test
+- GitHub PAT for the repo whose PRs your tickets reference
+- Google account with access to the team's fixture Drive folder
+- _(optional)_ a Playwright repo to archive passing tests into — the `<your-playwright-repo>` of your project
+
+Full step-by-step setup (4 MCP servers + OAuth dances) is in **[docs/SETUP.md](./docs/SETUP.md)**. Plan ~20 minutes the first time.
+
+### Run a test
+
+Inside a Claude Code session in this repo:
 
 ```
-> /archive-to-portal 2026-05-07_1430_SUP-7152/unit-1
+> /test-tickets LIN-123,LIN-456
 ```
 
-That copies the spec into your `portal-ui-automation` clone, adapts it to that repo's `pages/` + fixtures structure, and creates a branch. **It never pushes** — you review the diff and `git push` yourself.
+Defaults to **prod**. Use `--env=stg` to switch. Natural language works too — `测试 LIN-123, LIN-456` is treated the same.
 
-## Design
+The agent pauses for **user confirmation** twice:
 
-A few decisions that shape the whole pipeline:
+1. After triage, when any ticket is medium/low confidence or its user role can't be inferred.
+2. After execution, before reporting back to Linear, so you can review screenshots and the generated spec.
 
-**LLM-driven execution beats pre-written selectors.** A subagent looking at the actual page (DOM snapshot + screenshot) can decide the next click on the fly. That's far more robust to UI variation than a Playwright file written ahead of time against assumptions about the DOM. So the agent _executes first_, in a real browser, and only writes Playwright code from the trace of what worked.
+### Inspect a run
 
-**Playwright is the artifact, not the runtime.** The trace captured during execution is translated to `.spec.ts` only after **all `[primary]` scenarios pass**. What gets archived is therefore a recording of a known-working path. A failing run produces screenshots, a result file, and a Linear comment — but no spec, because a broken recording is worse than no recording.
+Open `artifacts/<run-id>/` — every artifact is plain JSON or markdown. The Linear comment links back to it.
 
-**Reviewed archival, not automatic ingestion.** `portal-ui-automation` is the canonical regression suite and stays clean: nothing lands in it until a human runs `/archive-to-portal` and reviews the diff. `exploratory-test-agent` never pushes to portal.
+### Archive a passing test
 
-**Confidence gating.** Linear tickets are often incomplete. The triage agent classifies each ticket `high`/`medium`/`low` and surfaces every medium/low decision (and any ambiguous user-role inference) for explicit user confirmation. No ticket is silently skipped — every skip carries a written reason in `02-triage.json`.
-
-**Hard separation between read and write to Linear.** Only `linear-reporter` writes (and only as comments — never status changes). Every other agent reads. Comments always include the run id and link back to the local report so you can trace evidence.
-
-**Credentials never leave the box.** Read once at the start of the run, kept in agent-local memory, used only for the login step. Passwords are masked before screenshots are taken, never appear in `trace.jsonl`, `result.json`, `generated.spec.ts`, or chat. The generated spec references `process.env.SUPIO_USERNAME` / `process.env.SUPIO_PASSWORD` placeholders, never inline values.
-
-## Pipeline at a glance
+After reviewing `generated.spec.ts`:
 
 ```
-fetch → triage → [confirm] → spec → execute (Chrome via MCP) → [review] → report to Linear
-                                                                           ↓
-                                                         optional, manual: archive to portal
+> /archive-to-portal 2026-05-07_1430_LIN-123/unit-1
 ```
 
-Per-stage detail, hard rules, and agent contracts live in [CLAUDE.md](CLAUDE.md).
+Adapts the spec to your Playwright repo's structure (pages/, fixtures, naming) and creates a branch. **It never pushes** — review the diff and `git push` yourself.
 
-## Status
+---
 
-POC. Run small batches, review every stage, expect the agent to ask before doing anything irreversible.
+## Project layout
+
+```
+.claude/
+  agents/                # one .md per sub-agent — these are the prompts
+  skills/                # /test-tickets, /archive-to-portal, /create-case
+  settings.json          # checked-in: permissions allowlist, MCP servers
+  settings.local.json    # gitignored: per-developer paths, secrets
+  test-env.local.json    # gitignored: test-tenant credentials
+artifacts/               # gitignored: per-run outputs
+fixtures/
+  manifest.json          # checked-in: fixture name → Drive file id mapping
+  cache/                 # gitignored: downloaded PDFs
+schemas/                 # JSON Schemas for spec / trace / result
+scripts/
+  attach-screenshot-to-comment.py   # compress + upload + delete attachment shim
+  check-phase.py                    # orchestrator pre-flight between phases
+  get-fixture.py                    # name → cached file via Drive API
+  google-drive.py                   # OAuth client + find/download
+  validate-artifact.py              # schema validator
+  verify-mcp.sh                     # Linear MCP OAuth bootstrap
+docs/
+  SETUP.md
+CLAUDE.md                # operating manual the agents read on every session
+```
+
+## Hard rules at a glance
+
+- **No silent skips.** Every skipped ticket has a written reason.
+- **No production writes outside the test tenant.** Configured per-env in `test-env.local.json`.
+- **Linear-side relationships are the human owner's job.** This agent posts comments and nothing else — never `relatedTo` / `blocks` / `parentId`.
+- **No reload during a scenario unless the spec demands it.** Reload destroys evidence of "things that should update live but didn't"; that class of bug needs an explicit non-reload observation first.
+- **Spec is grounded in PR diffs, not ticket prose.** When the ticket promises X but the PR doesn't ship X, that's an Open question, not a scenario.
+
+Full operating manual for agent-side rules: **[CLAUDE.md](./CLAUDE.md)**.
+
+## License
+
+TBD.

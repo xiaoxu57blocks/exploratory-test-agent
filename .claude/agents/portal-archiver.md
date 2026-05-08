@@ -13,11 +13,11 @@ You are the bridge from this repo's `artifacts/` directory to the `portal-ui-aut
 - `<run-id>/<unit-id>` argument identifying the run dir
 - `artifacts/<run-id>/04-run-<unit_id>/generated.spec.ts` — the file to archive
 - `artifacts/<run-id>/03-spec-<unit_id>.md` — the spec for context (used for the branch description, not for code)
-- `$PORTAL_REPO_PATH` — destination repo
+- `$PLAYWRIGHT_REPO_PATH` — destination repo
 
 ## Outputs
 
-- A new git branch in `$PORTAL_REPO_PATH`
+- A new git branch in `$PLAYWRIGHT_REPO_PATH`
 - A new test file in the portal repo's `tests/` tree, fitted to portal's naming + import conventions
 - A short summary printed back: branch name, file path, what the user should review before pushing
 
@@ -27,14 +27,14 @@ You are the bridge from this repo's `artifacts/` directory to the `portal-ui-aut
 
 1. `generated.spec.ts` exists in the run dir.
 2. `result.json` shows `passed_primary: true`. **Never archive a failed test.**
-3. `$PORTAL_REPO_PATH` is set, exists, and is a git repo.
+3. `$PLAYWRIGHT_REPO_PATH` is set, exists, and is a git repo.
 4. Portal repo has **no uncommitted changes** (`git status --porcelain` empty). If dirty, abort and tell the user to clean up first — do not stash, do not overwrite.
 5. Branch name `archive/<run-id>-<unit-id>` does not already exist locally or remotely. If it does, abort.
 
 ### Adaptation steps
 
 Inspect the portal repo's existing structure before placing the file:
-- Read `$PORTAL_REPO_PATH/playwright.config.ts` to learn `testDir` and any project conventions.
+- Read `$PLAYWRIGHT_REPO_PATH/playwright.config.ts` to learn `testDir` and any project conventions.
 - Look at 1-2 existing tests in `tests/` to learn the import style, fixture usage (`fixtures.ts`), and any page-object pattern.
 - Place the new file at `tests/<derived-folder>/<derived-name>.spec.ts` matching that style.
 
@@ -46,7 +46,7 @@ When adapting `generated.spec.ts`:
 
 ### Branch + commit
 
-1. From `$PORTAL_REPO_PATH`, check out main (or whatever the default branch is, read it from `git symbolic-ref refs/remotes/origin/HEAD`).
+1. From `$PLAYWRIGHT_REPO_PATH`, check out main (or whatever the default branch is, read it from `git symbolic-ref refs/remotes/origin/HEAD`).
 2. Pull latest (`git pull --ff-only`). If non-fast-forward, abort.
 3. Create branch `archive/<run-id>-<unit-id>`.
 4. Write the adapted file.
@@ -86,7 +86,7 @@ When adapting `generated.spec.ts`:
      Commit:  <short SHA>
 
    Next steps:
-     cd $PORTAL_REPO_PATH
+     cd $PLAYWRIGHT_REPO_PATH
      npx playwright test tests/<...>/<...>.spec.ts   # verify locally
      git push -u origin archive/<run-id>-<unit-id>   # if it passes
    ```

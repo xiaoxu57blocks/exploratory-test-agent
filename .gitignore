@@ -1,9 +1,18 @@
 # Run artifacts — local working state, never commit
 artifacts/
 
+# Fixture PDF cache — pulled from team Drive on demand by /create-case; not source
+fixtures/cache/
+
 # Local-only settings overrides
 .claude/settings.local.json
 .claude/test-env.local.json
+
+# Google OAuth client + per-user cached token (desktop client_secret is not
+# truly secret per Google's docs, but the cached refresh_token is — so we
+# keep both out of the repo and document setup in the README).
+.claude/google-oauth-client.json
+.claude/google-oauth-token.json
 
 # Per-process runtime locks for Claude Code's ScheduleWakeup (sessionId + PID; meaningless across machines)
 .claude/scheduled_tasks.lock

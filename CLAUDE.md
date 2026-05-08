@@ -18,7 +18,7 @@ The generated `.spec.ts` lives in `artifacts/` (gitignored) until the user expli
 
 ## Companion Repository
 
-[portal-ui-automation](https://github.com/codeseals/portal-ui-automation) (path: `$PORTAL_REPO_PATH`) is the canonical Playwright regression suite. It is **not** in the execution path of `/test-tickets` — it is the **archive destination** for tests that pass review.
+[portal-ui-automation](https://github.com/codeseals/portal-ui-automation) (path: `$PLAYWRIGHT_REPO_PATH`) is the canonical Playwright regression suite. It is **not** in the execution path of `/test-tickets` — it is the **archive destination** for tests that pass review.
 
 ## Pipeline Overview
 
@@ -95,7 +95,7 @@ User: /test-tickets SUP-7152,SUP-7497 [--env=stg|prod]
 ### Cross-repo boundary
 
 - This repo **never** imports from `portal-ui-automation`.
-- This repo **does** write to `$PORTAL_REPO_PATH` only during `/archive-to-portal`, never during `/test-tickets`.
+- This repo **does** write to `$PLAYWRIGHT_REPO_PATH` only during `/archive-to-portal`, never during `/test-tickets`.
 - `portal-archiver` creates a branch in the portal repo but never pushes; the user runs `git push` manually after review.
 
 ### Linear write operations
@@ -103,6 +103,9 @@ User: /test-tickets SUP-7152,SUP-7497 [--env=stg|prod]
 - `linear-reporter` is the only agent that writes to Linear (comments).
 - Never change ticket state automatically. Only post comments.
 - All comments include the run-id and link to the local report path.
+- **Never create relationships between tickets.** When the user passes a list of ticket IDs to `/test-tickets`, treat each ticket as an independent test target. Do **not** call `mcp__linear__save_issue` to add `relatedTo`, `blocks`, `blockedBy`, `parentId`, `duplicateOf`, or any other ticket-to-ticket linkage on their behalf. Co-occurrence in a single run-id is a workflow detail, not a semantic relationship — establishing it as a Linear-side relation pollutes the ticket's history with metadata the user did not ask for. The same applies to `links`, `labels`, and `milestone` — only the human ticket owner gets to set those.
+- The above rule applies to *every* agent, not just `linear-reporter`. If a future agent definition adds `mcp__linear__save_issue` to its tool list, it must explicitly justify why and still must not touch relationship fields.
+- **Linear auto-creates "related issue" links from ticket IDs mentioned in comment bodies.** A comment containing the literal text `SUP-1234` will trigger Linear's mention parser, which then logs an `added related issue SUP-1234` activity entry on every other ticket whose comment mentioned it. This happens server-side — no `save_issue` call is involved, and no agent permission can prevent it. The only mitigation is to keep ticket IDs out of comment bodies on tickets where they don't belong. Concretely: a comment posted on `LIN-A` must not contain the literal string `LIN-B` unless `LIN-B` is genuinely about `LIN-A`'s subject matter. Cross-ticket workflow context (e.g. "this ticket was tested in the same run as LIN-B") is exactly what triggers the unwanted backlinks and must stay in local artifacts (`05-summary.md`), never in the Linear comment.
 
 ## Agent Roster
 
@@ -132,7 +135,7 @@ Required configuration (all in gitignored local files):
 
 | File | Purpose |
 |---|---|
-| `.claude/settings.local.json` | `PORTAL_REPO_PATH` env var, additional dirs |
+| `.claude/settings.local.json` | `PLAYWRIGHT_REPO_PATH` env var, additional dirs |
 | `.claude/test-env.local.json` | Test URLs + credentials per env (stg, prod) per role (internal, external) |
 
 Each has a corresponding `.example` checked in. **Both files are required**; the agent must error early with a clear message if either is missing or malformed.
