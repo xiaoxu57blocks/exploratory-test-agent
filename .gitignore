@@ -5,6 +5,9 @@ artifacts/
 .claude/settings.local.json
 .claude/test-env.local.json
 
+# Per-process runtime locks for Claude Code's ScheduleWakeup (sessionId + PID; meaningless across machines)
+.claude/scheduled_tasks.lock
+
 # Env files
 .env
 .env.local

@@ -26,6 +26,8 @@ Fill in every section. If a section has no content, write `_None._` — do not o
   - `feature-<other>` — `must_be_off` (kill-switch / cleanup gate)
   - If unsure: list the flag in **Open questions** instead of guessing. Do not write `<unknown>` here — the pre-flight cannot act on unknowns.
 - **Data setup**: <case state, files uploaded, role assignments — anything the test must seed before the user actions begin>
+  - **Case name convention** (when the spec creates a case): the case name must start with `deqtest_` so the test tenant's deqtest filter picks it up. Write the exact name into the spec, e.g. `deqtest_<short-ticket-id>_<short-feature-tag>` plus a run-id suffix the executor appends, so the executor can use it verbatim.
+  - **Fixture source**: the canonical fixture library is the team's Google Drive folder `https://drive.google.com/drive/u/0/folders/1-KrKSmynJ_KhqSYstEttxrw6RnqHsmDq` (anonymous read access). When the spec needs files uploaded to a case, name the specific file(s) you expect to use. If the file's *content* (not just its name) is what determines a successful test — e.g. a Grouped Medication card needs structured Rx/order data — say so under Data setup so the executor doesn't pick a wrongly-named file.
 - **External systems**: <if connectors required: SmartAdvocate, OneDrive, Litify, etc.>
 
 ## Test scenarios

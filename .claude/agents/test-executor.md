@@ -59,13 +59,35 @@ If `navigate_page` returns a timeout error, **do not assume failure**. Check `li
 
 Never take a screenshot or assert immediately after a navigation/click without first confirming load. A blank-background screenshot is always a bug in this workflow, not a real result.
 
+### Server-side processing waits (Supio case parsing)
+
+Some Supio actions trigger multi-minute server-side processing — most importantly, uploading a file to a case enqueues a parsing job that populates the timeline ~3–15 minutes later. The Timeline tab does NOT show a clear "still processing" indicator and is misleading to poll. The canonical signal is on the **Overview tab → Case Activity card (top-right)**:
+
+- While processing: `IN PROGRESS · Extracting timeline data · Nm`
+- When complete: `NEEDS ATTENTION · N new events added to Timeline · from M files · ...`
+
+Rule: when the spec's Data setup or a scenario requires server-side processing (case parsing, ledger generation, draft generation), wait by:
+
+1. Navigate (or reload) `/timeline/<case_id>?t=overview`.
+2. `wait_for(["IN PROGRESS", "NEEDS ATTENTION", "events added"], timeout=15000)` to confirm the indicator is rendered.
+3. If the page shows `IN PROGRESS`, yield via `ScheduleWakeup` for 90–120s (NOT a fixed inline `sleep` — the executor's parent loop should yield) and re-poll. Cap total wait at 20 minutes; if still IN PROGRESS, abort with a clear "parsing exceeded ceiling" message.
+4. Once `NEEDS ATTENTION` (or no IN PROGRESS) is visible, proceed.
+
+Never poll the Timeline tab directly to detect parse completion — its event list lags Overview, and reloading it eats Chrome roundtrips for nothing. Never write a hardcoded `sleep 600s` — failing fast on a slow run is more useful than sleeping past completion.
+
+### Fixture file paths
+
+chrome-devtools MCP only reads files inside its declared workspace roots. The project workspace is one root; `~/Downloads`, `/tmp`, `~/Desktop`, and any path outside `/Users/57block/Workspace/exploratory-test-agent` are NOT roots, and `mcp__chrome-devtools__upload_file` will refuse them with `Access denied: path ... is not within any of the workspace roots`.
+
+Rule: every fixture file the executor needs to upload must live under `artifacts/<run-id>/`. If a fixture starts elsewhere (browser auto-download, manual user drop, `curl` to a temp dir), copy it into `artifacts/<run-id>/<original-or-sanitized-name>` first, then call `upload_file` with that path. Never call `upload_file` with a path you have not first verified is inside the workspace.
+
 ### Browser lifecycle
 
 - Use Chrome DevTools MCP to launch (or attach to) Chrome. Prefer a clean profile per run unless the spec explicitly requires a logged-in session.
 - After each scenario, reset to a clean state (navigate to the env's base URL or close+reopen the page) — scenarios must not leak state into each other.
 - On unrecoverable error, take a final screenshot, write what you know to `result.json`, and exit. Do not silently retry forever.
 
-### Feature flag pre-flight (run after login, before any scenario)
+### Feature flag pre-flight (run as the EARLIEST step that touches the application — before any data setup, including case creation)
 
 Supio's portal has a runtime flag-sync gap: backend `me.enabled_feature_flags` may already include a flag, but the React store only honors it after a local override appears in `localStorage.enabledFeatureFlags`. Skipping pre-flight will cause the UI to silently render the *pre-feature* path and produce false-negative scenario failures.
 
@@ -88,6 +110,8 @@ For every flag listed under `Preconditions → Feature flags` in the spec:
 Fallback if backend GraphQL is unreachable: open the in-app dev flag panel (avatar → coffee-cup icon, label `rest`), search for the flag, and toggle it on. Record the trace entry with `method: "dev_panel_toggle"`. Use this only when the GraphQL path fails — the localStorage path is deterministic and screenshot-able; the UI path adds page state that's harder to reason about.
 
 Never proceed to scenarios with missing required flags. Better to abort with a clear error than to run scenarios that will fail for the wrong reason.
+
+Critically: pre-flight runs before *every* state-creating action, not just before scenarios. If the spec's Data setup creates a case, an account, a session, or any other server-side object via a feature-gated flow, the flag must be ON before that creation call — backends commonly bind processing pipelines, default features, or schema versions at create-time, and toggling the flag after the object exists will not retroactively switch the pipeline. (Observed: a case created with `feature-ai-artifact-first` OFF was permanently bound to the legacy pipeline; only a recreated case under flag-ON saw the new UI.)
 
 ### Scenario execution
 
@@ -117,10 +141,11 @@ Do not attempt to "improve" the trace with branches, retries, or assertions that
 2. Initialize the Chrome DevTools MCP session and navigate to the env's base URL.
 3. Log in once with the role from preconditions. Capture a `login_as` trace entry.
 4. Run the **Feature flag pre-flight** (above) for every flag listed in the spec's Preconditions. Abort if any `enable_required` flag is missing from the backend.
-5. For each scenario, execute and evaluate per the rules above.
-6. After all scenarios, write `result.json` with per-scenario outcomes and a top-level `passed_primary` boolean.
-7. If `passed_primary` is true, generate `generated.spec.ts` from the trace.
-8. Return a one-paragraph summary to the orchestrator: total scenarios, pass/fail breakdown, whether `generated.spec.ts` was created, and the path to the run dir.
+5. If the spec's Data setup involves creating server-side state (case, session, workspace, etc.), perform that creation NOW — not in the scenario loop. Pre-flight must already be done by step 4 above; this is the first state-creating action.
+6. For each scenario, execute and evaluate per the rules above.
+7. After all scenarios, write `result.json` with per-scenario outcomes and a top-level `passed_primary` boolean.
+8. If `passed_primary` is true, generate `generated.spec.ts` from the trace.
+9. Return a one-paragraph summary to the orchestrator: total scenarios, pass/fail breakdown, whether `generated.spec.ts` was created, and the path to the run dir.
 
 ## Anti-patterns
 
