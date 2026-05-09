@@ -14,11 +14,11 @@ Outputs:
 4. **A generated Playwright `.spec.ts` file** as a side-effect of the run (the executor records every step it took, then translates the trace into Playwright code)
 5. A comment posted on each ticket summarizing results
 
-The generated `.spec.ts` lives in `artifacts/` (gitignored) until the user explicitly runs `/archive-to-portal`, at which point it is adapted to the [portal-ui-automation](https://github.com/codeseals/portal-ui-automation) repo's conventions and committed on a branch there.
+The generated `.spec.ts` lives in `artifacts/` (gitignored) until the user explicitly runs `/archive-to-portal`, at which point it is adapted to the `<your-playwright-repo>` repo's conventions and committed on a branch there.
 
 ## Companion Repository
 
-[portal-ui-automation](https://github.com/codeseals/portal-ui-automation) (path: `$PLAYWRIGHT_REPO_PATH`) is the canonical Playwright regression suite. It is **not** in the execution path of `/test-tickets` — it is the **archive destination** for tests that pass review.
+`<your-playwright-repo>` (path: `$PLAYWRIGHT_REPO_PATH`) is the canonical Playwright regression suite. It is **not** in the execution path of `/test-tickets` — it is the **archive destination** for tests that pass review.
 
 ## Pipeline Overview
 
