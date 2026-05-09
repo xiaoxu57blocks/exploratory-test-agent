@@ -11,6 +11,13 @@
         "CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS": "1",
         "CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS": "1"
       }
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
     }
   }
 }

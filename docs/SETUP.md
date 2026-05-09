@@ -56,25 +56,15 @@ The strategist reads PR diffs to ground scenarios in shipped code. The MCP for t
 5. Paste it into `.claude/settings.local.json` under `env.GITHUB_PERSONAL_ACCESS_TOKEN`.
 6. If your org enforces SAML SSO, the new token page has a "Configure SSO" link; click it and authorize the org.
 
-The MCP server is added by:
+The GitHub MCP server itself is already declared in the project-level [`.mcp.json`](../.mcp.json) and reads its token from `${GITHUB_PERSONAL_ACCESS_TOKEN}`. Claude Code exports the values from `.claude/settings.local.json` → `env` to the MCP server's process, so once your token is in that file there is nothing else to register — no `claude mcp add` step.
 
-```bash
-claude mcp add github npx -e GITHUB_PERSONAL_ACCESS_TOKEN=$(jq -r '.env.GITHUB_PERSONAL_ACCESS_TOKEN' .claude/settings.local.json) -- -y @modelcontextprotocol/server-github
-```
-
-(Re-run this if you rotate the token — the env var is captured into the MCP server config at add-time, not read live.)
-
-Verify with `claude mcp list` — `github` should report `✓ Connected`. If you see HTTP 401, the PAT didn't authorize the org yet.
+Verify with `claude mcp list` — `github` should report `✓ Connected`. If you see HTTP 401, the PAT didn't authorize the org yet (see step 6). If you see "token not provided", the `env.GITHUB_PERSONAL_ACCESS_TOKEN` field is missing or unreadable in `.claude/settings.local.json`.
 
 ## 4. Chrome DevTools MCP
 
-Driven entirely from MCP — no local browser config to touch. First run installs the package on demand:
+Driven entirely from MCP — no local browser config to touch. The server is already declared in [`.mcp.json`](../.mcp.json); the first run will let `npx` install the package on demand.
 
-```bash
-claude mcp add chrome-devtools npx -- -y chrome-devtools-mcp@latest
-```
-
-Verify with `claude mcp list` — should report `✓ Connected`. The actual Chrome window only opens when an executor scenario starts.
+Verify with `claude mcp list` — `chrome-devtools` should report `✓ Connected`. The actual Chrome window only opens when an executor scenario starts.
 
 ## 5. Google Drive (for fixture downloads)
 
