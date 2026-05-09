@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Data plan (test-data-planner output)",
+  "description": "Per-unit case-creation/reuse plan emitted by test-data-planner after triage and before strategy. The strategist consumes it when writing each spec's data_setup; the executor consumes it to decide whether to call /create-case at run time and which fixtures to upload.",
+  "type": "object",
+  "required": ["planned_at", "case_groups"],
+  "additionalProperties": true,
+  "properties": {
+    "planned_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "case_groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["case_group_id", "case_decision", "covers_units"],
+        "additionalProperties": true,
+        "properties": {
+          "case_group_id": {
+            "type": "string",
+            "pattern": "^case-\\d+$"
+          },
+          "case_decision": {
+            "enum": ["create_fresh", "reuse_existing", "blocked_no_fixture"]
+          },
+          "case_kind": {
+            "type": "string",
+            "description": "e.g. 'AI-artifact-first MVA'. Required when case_decision=create_fresh; the /create-case skill uses this to drive the Case Type form field."
+          },
+          "case_id": {
+            "type": "string",
+            "description": "Required when case_decision=reuse_existing. Numeric case id from the prod tenant."
+          },
+          "reuse_reason": {
+            "type": "string",
+            "description": "Required when case_decision=reuse_existing. Free-text why reuse is justified (user-named fixture, data-free PR, etc.)."
+          },
+          "covers_units": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "pattern": "^unit-\\d+$"}
+          },
+          "fixtures_needed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "additionalProperties": true,
+              "properties": {
+                "name": {"type": "string"},
+                "purpose": {"type": "string"},
+                "covers_event_types": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                }
+              }
+            },
+            "description": "Required when case_decision=create_fresh. The set of fixtures the /create-case call will upload via --add. Subset of names found in fixtures/manifest.json (after any auto-add)."
+          },
+          "rationale": {"type": "string"},
+          "expected_event_types": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "The union of covers_event_types across all fixtures_needed, for human review."
+          },
+          "fixture_gap": {
+            "type": "string",
+            "description": "Required when case_decision=blocked_no_fixture. Names what was missing (e.g. 'No fixture in manifest covers ConversationFile uploads, and Drive search for chat-attachment-* returned zero matches')."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"case_decision": {"const": "create_fresh"}}
+            },
+            "then": {
+              "required": ["case_kind", "fixtures_needed"]
+            }
+          },
+          {
+            "if": {
+              "properties": {"case_decision": {"const": "reuse_existing"}}
+            },
+            "then": {
+              "required": ["case_id", "reuse_reason"]
+            }
+          },
+          {
+            "if": {
+              "properties": {"case_decision": {"const": "blocked_no_fixture"}}
+            },
+            "then": {
+              "required": ["fixture_gap"]
+            }
+          }
+        ]
+      }
+    },
+    "manifest_changes": {
+      "type": "array",
+      "description": "Entries added to fixtures/manifest.json during this planning run via Drive auto-search. Empty array if no auto-adds were needed.",
+      "items": {
+        "type": "object",
+        "required": ["filename", "drive_file_id", "added_for_unit"],
+        "additionalProperties": true,
+        "properties": {
+          "filename": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "added_for_unit": {"type": "string", "pattern": "^unit-\\d+$"},
+          "auto_searched": {"type": "boolean"}
+        }
+      }
+    },
+    "blocked_units": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^unit-\\d+$"},
+      "description": "Convenience: list of unit-ids that ended up in a case_group with case_decision=blocked_no_fixture."
+    }
+  }
+}

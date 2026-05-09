@@ -187,9 +187,10 @@ def load_schema(kind: str) -> dict:
         "result": "run-result.schema.json",
         "trace": "run-trace.schema.json",
         "spec": "run-spec.schema.json",
+        "data-plan": "run-data-plan.schema.json",
     }.get(kind)
     if not name:
-        die(2, f"unknown --kind {kind!r} (expected: result | trace | spec)")
+        die(2, f"unknown --kind {kind!r} (expected: result | trace | spec | data-plan)")
     path = SCHEMA_DIR / name
     if not path.exists():
         die(2, f"schema not found: {path}")
@@ -229,7 +230,7 @@ def die(code: int, msg: str) -> None:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    p.add_argument("--kind", required=True, choices=["result", "trace", "spec"])
+    p.add_argument("--kind", required=True, choices=["result", "trace", "spec", "data-plan"])
     p.add_argument("--path", required=True, type=Path)
     p.add_argument("--quiet", action="store_true", help="suppress success message")
     args = p.parse_args()

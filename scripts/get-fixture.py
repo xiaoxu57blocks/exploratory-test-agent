@@ -39,6 +39,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CACHE_DIR = REPO_ROOT / "fixtures" / "cache"
 MANIFEST_PATH = REPO_ROOT / "fixtures" / "manifest.json"
+# Team's Supio QA shared drive AUTO subfolder. Same id used by /create-case.
+DEFAULT_DRIVE_FOLDER_ID = "1-KrKSmynJ_KhqSYstEttxrw6RnqHsmDq"
 
 
 def emit(d: dict, exit_code: int = 0) -> None:
@@ -84,7 +86,63 @@ def download_drive_file(file_id: str, dest: Path) -> int:
     return dest.stat().st_size
 
 
-def ensure(name: str) -> dict:
+def search_drive_for_name(name_substring: str, folder_id: str) -> list[dict]:
+    """Run scripts/google-drive.py find against the AUTO folder; return matches."""
+    helper = REPO_ROOT / "scripts" / "google-drive.py"
+    res = subprocess.run(
+        [sys.executable, str(helper), "find", "--folder-id", folder_id, "--name-contains", name_substring],
+        capture_output=True, text=True
+    )
+    if res.returncode != 0:
+        emit({"ok": False, "stage": "drive_search", "msg": res.stderr.strip() or "google-drive.py find failed", "name_substring": name_substring}, 3)
+    matches = []
+    for line in res.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            matches.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return matches
+
+
+def auto_add_manifest_entry(name: str, folder_id: str) -> dict:
+    """Search Drive for the closest match to `name`, append a manifest entry, return the new entry."""
+    # Search by the base filename minus extension to maximize hit rate.
+    stem = Path(name).stem
+    matches = search_drive_for_name(stem, folder_id)
+    if not matches:
+        emit({
+            "ok": False,
+            "stage": "drive_search_empty",
+            "name": name,
+            "folder_id": folder_id,
+            "msg": f"Drive search for '{stem}' in folder {folder_id} returned zero results. Verify the file exists in the AUTO subfolder of the Supio QA shared drive.",
+        }, 3)
+    # Prefer the result whose name matches `name` exactly; otherwise take the first.
+    pick = next((m for m in matches if m.get("name") == name), matches[0])
+    drive_name = pick["name"]
+    drive_id = pick["id"]
+    new_entry = {
+        "drive_file_id": drive_id,
+        "covers_event_types": [],
+        "notes": f"Auto-added by get-fixture.py via Drive search. Original requested name: '{name}'. Review covers_event_types before next planning run.",
+    }
+    # Append to manifest.json. Preserve key order; insert after the last fixture entry.
+    raw = MANIFEST_PATH.read_text()
+    manifest_obj = json.loads(raw)
+    manifest_obj[drive_name] = new_entry
+    MANIFEST_PATH.write_text(json.dumps(manifest_obj, indent=2) + "\n")
+    return {
+        "name": drive_name,
+        "drive_file_id": drive_id,
+        "auto_added": True,
+        "original_request": name,
+    }
+
+
+def ensure(name: str, auto_add: bool = False, folder_id: str = DEFAULT_DRIVE_FOLDER_ID) -> dict:
     cached = CACHE_DIR / name
     if cached.exists() and cached.stat().st_size > 0:
         return {
@@ -98,13 +156,27 @@ def ensure(name: str) -> dict:
     manifest = load_manifest()
     entry = manifest.get(name)
     if not entry:
-        emit({
-            "ok": False,
-            "stage": "manifest_lookup",
-            "name": name,
-            "known": sorted(manifest.keys()),
-            "msg": f"'{name}' not in fixtures/manifest.json. Known fixtures: {sorted(manifest.keys())}.",
-        }, 2)
+        known = sorted(k for k in manifest.keys() if not k.startswith("_") and isinstance(manifest[k], dict))
+        if not auto_add:
+            emit({
+                "ok": False,
+                "stage": "manifest_lookup",
+                "name": name,
+                "known": known,
+                "msg": f"'{name}' not in fixtures/manifest.json. Known fixtures: {known}. Pass --auto-add-via-drive to search the team Drive folder and append an entry automatically.",
+            }, 2)
+        added = auto_add_manifest_entry(name, folder_id)
+        # Re-resolve under the (possibly different) actual Drive name.
+        actual_name = added["name"]
+        if actual_name != name:
+            # The Drive file's name differs from the requested name. Re-run ensure with the actual name.
+            res = ensure(actual_name, auto_add=False, folder_id=folder_id)
+            res["auto_added_to_manifest"] = added
+            return res
+        manifest = load_manifest()
+        entry = manifest.get(name)
+        if not entry:
+            emit({"ok": False, "stage": "manifest_post_auto_add", "name": name, "msg": "Auto-add reported success but the manifest still has no entry."}, 3)
 
     file_id = entry.get("drive_file_id")
     if not file_id:
@@ -148,6 +220,8 @@ def main() -> None:
     p.add_argument("--name", help="fixture name as listed in fixtures/manifest.json")
     p.add_argument("--copy-to", type=Path, help="copy the resolved fixture into this directory")
     p.add_argument("--list", action="store_true", help="list known fixtures + cache state")
+    p.add_argument("--auto-add-via-drive", action="store_true", help="if --name is not in manifest.json, search the team Drive AUTO folder for the closest match and append a new entry. Used by test-data-planner.")
+    p.add_argument("--drive-folder-id", default=DEFAULT_DRIVE_FOLDER_ID, help="override the Drive folder id searched by --auto-add-via-drive (default: AUTO subfolder of Supio QA shared drive)")
     args = p.parse_args()
 
     if args.list:
@@ -157,7 +231,7 @@ def main() -> None:
     if not args.name:
         emit({"ok": False, "stage": "args", "msg": "either --name or --list required"}, 2)
 
-    result = ensure(args.name)
+    result = ensure(args.name, auto_add=args.auto_add_via_drive, folder_id=args.drive_folder_id)
 
     if args.copy_to:
         args.copy_to.mkdir(parents=True, exist_ok=True)

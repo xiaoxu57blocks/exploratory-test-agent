@@ -9,6 +9,7 @@ the pipeline early instead of poisoning downstream agents.
 Usage:
   scripts/check-phase.py --run-id 2026-05-08_1524_SUP-7623 --phase fetch
   scripts/check-phase.py --run-id 2026-05-08_1524_SUP-7623 --phase triage
+  scripts/check-phase.py --run-id 2026-05-08_1524_SUP-7623 --phase data-plan
   scripts/check-phase.py --run-id 2026-05-08_1524_SUP-7623 --phase spec --unit unit-1
   scripts/check-phase.py --run-id 2026-05-08_1524_SUP-7623 --phase execute --unit unit-1
 
@@ -69,6 +70,13 @@ def check_triage(run_dir: Path) -> None:
         die(1, f"{triage}: 'test_units' missing")
 
 
+def check_data_plan(run_dir: Path) -> None:
+    must_exist(run_dir / "02-triage.json", "triage artifact (prerequisite)")
+    plan = run_dir / "02b-data-plan.json"
+    must_exist(plan, "data plan artifact")
+    must_validate("data-plan", plan)
+
+
 def check_spec(run_dir: Path, unit: str | None) -> None:
     must_exist(run_dir / "02-triage.json", "triage artifact (prerequisite)")
     if not unit:
@@ -98,7 +106,7 @@ def check_execute(run_dir: Path, unit: str | None) -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--run-id", required=True)
-    p.add_argument("--phase", required=True, choices=["fetch", "triage", "spec", "execute"])
+    p.add_argument("--phase", required=True, choices=["fetch", "triage", "data-plan", "spec", "execute"])
     p.add_argument("--unit", help="unit id, required for --phase spec or execute")
     args = p.parse_args()
 
@@ -110,6 +118,8 @@ def main() -> None:
         check_fetch(run_dir)
     elif args.phase == "triage":
         check_triage(run_dir)
+    elif args.phase == "data-plan":
+        check_data_plan(run_dir)
     elif args.phase == "spec":
         check_spec(run_dir, args.unit)
     elif args.phase == "execute":

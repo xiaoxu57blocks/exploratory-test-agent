@@ -39,7 +39,12 @@ User: /test-tickets SUP-7152,SUP-7497 [--env=stg|prod]
    USER CONFIRMATION (medium/low confidence + role inference)
          │
          ▼
-┌────────────────────┐  per test unit
+┌────────────────────┐  decides per unit: create_fresh vs reuse_existing case;
+│ test-data-planner  │  picks fixtures from manifest by covers_event_types;
+└────────────────────┘  auto-adds manifest entries via Drive search when needed
+         │  artifacts/<run-id>/02b-data-plan.json
+         ▼
+┌────────────────────┐  per test unit; binds spec to data plan's case decision
 │ test-strategist    │  produces Requirement Spec
 └────────────────────┘  (env, role, scenarios, preconditions)
          │  artifacts/<run-id>/03-spec-<unit>.md
@@ -100,23 +105,24 @@ User: /test-tickets SUP-7152,SUP-7497 [--env=stg|prod]
 
 ### Linear write operations
 
-- `linear-reporter` is the only agent that writes to Linear (comments).
-- Never change ticket state automatically. Only post comments.
+- `linear-reporter` is the only agent that writes to Linear, and only via `save_comment`. No state changes, no labels, no relationships, no milestones — only the human ticket owner sets those.
 - All comments include the run-id and link to the local report path.
-- **Never create relationships between tickets.** When the user passes a list of ticket IDs to `/test-tickets`, treat each ticket as an independent test target. Do **not** call `mcp__linear__save_issue` to add `relatedTo`, `blocks`, `blockedBy`, `parentId`, `duplicateOf`, or any other ticket-to-ticket linkage on their behalf. Co-occurrence in a single run-id is a workflow detail, not a semantic relationship — establishing it as a Linear-side relation pollutes the ticket's history with metadata the user did not ask for. The same applies to `links`, `labels`, and `milestone` — only the human ticket owner gets to set those.
-- The above rule applies to *every* agent, not just `linear-reporter`. If a future agent definition adds `mcp__linear__save_issue` to its tool list, it must explicitly justify why and still must not touch relationship fields.
-- **Linear auto-creates "related issue" links from ticket IDs mentioned in comment bodies.** A comment containing the literal text `SUP-1234` will trigger Linear's mention parser, which then logs an `added related issue SUP-1234` activity entry on every other ticket whose comment mentioned it. This happens server-side — no `save_issue` call is involved, and no agent permission can prevent it. The only mitigation is to keep ticket IDs out of comment bodies on tickets where they don't belong. Concretely: a comment posted on `LIN-A` must not contain the literal string `LIN-B` unless `LIN-B` is genuinely about `LIN-A`'s subject matter. Cross-ticket workflow context (e.g. "this ticket was tested in the same run as LIN-B") is exactly what triggers the unwanted backlinks and must stay in local artifacts (`05-summary.md`), never in the Linear comment.
+- **Never create relationships between tickets** (`relatedTo`, `blocks`, `blockedBy`, `parentId`, `duplicateOf`, `links`, etc.). Co-occurrence in a `/test-tickets` run is a workflow detail, not a semantic relationship. This rule applies to every agent — if a future agent gets `mcp__linear__save_issue` in its tools, it must explicitly justify why and still must not touch relationship fields.
+- **Linear auto-creates "related issue" backlinks from ticket IDs mentioned in comment bodies.** A comment on `LIN-A` containing the literal string `LIN-B` triggers a server-side mention parser that logs an "added related issue" entry on `LIN-B`. No agent permission can prevent this. Mitigation: a comment on `LIN-A` must not contain `LIN-B` unless the comment is genuinely about `LIN-B`'s subject matter. Cross-ticket workflow context belongs in local `05-summary.md`, never in the Linear comment body.
 
 ## Agent Roster
 
-| Agent | Purpose | Tools |
-|-------|---------|-------|
-| `linear-fetcher` | Pull ticket data via Linear MCP | `mcp__linear__*`, Read, Write |
-| `test-triage` | Decide test/skip, cluster, infer user role | Read, Write, Grep |
-| `test-strategist` | Produce Requirement Spec per test unit | Read, Write |
-| `test-executor` | Run the test in Chrome via Chrome DevTools MCP, record trace, generate .spec.ts | `mcp__chrome-devtools__*`, Read, Write, Bash |
-| `portal-archiver` | Adapt generated.spec.ts to portal repo, create branch | Bash, Read, Write |
-| `linear-reporter` | Post results back to Linear | `mcp__linear__*`, Read |
+| Agent | Kind | Purpose |
+|-------|------|---------|
+| `linear-fetcher` | sub-agent | Pull ticket data via Linear MCP |
+| `test-triage` | sub-agent | Decide test/skip, cluster tickets into units, infer user role |
+| `test-data-planner` | sub-agent | Decide create-fresh vs reuse-existing case per unit; pick fixtures by event-type coverage |
+| `test-strategist` | sub-agent | Produce Requirement Spec per test unit |
+| `test-executor` | **in-context runbook** | Drive Chrome via Chrome DevTools MCP, record trace, generate `.spec.ts`. NOT a sub-agent — orchestrator follows `.claude/agents/test-executor.md` in the main session. See that file for why and don't try to revert. |
+| `linear-reporter` | sub-agent | Post results back to Linear (per-unit + aggregate modes) |
+| `portal-archiver` | sub-agent | Adapt `generated.spec.ts` to portal repo, create branch |
+
+Each agent's tools, inputs, and detailed rules live in its own `.claude/agents/<name>.md` — do not duplicate them here.
 
 ## Skills
 
@@ -151,28 +157,14 @@ The Linear MCP server uses OAuth on first run; no API token needed. Ticket IDs a
 ## Common Operations
 
 ```bash
-# Verify Linear MCP is working
-./scripts/verify-mcp.sh
-
-# Run pipeline (prod, default)
-> /test-tickets SUP-7152,SUP-7497
-
-# Run pipeline on STG
-> /test-tickets SUP-7152 --env=stg
-
-# Natural language equivalent
-> 测试 SUP-7152, SUP-7497
-
-# Inspect a run
-ls artifacts/2026-05-07_1430_SUP-7152/
-
-# Archive a passing test to portal (manual, after reviewing generated.spec.ts)
-> /archive-to-portal 2026-05-07_1430_SUP-7152/unit-1
+./scripts/verify-mcp.sh                                # smoke-check Linear MCP
+ls artifacts/<run-id>/                                 # inspect a run's artifacts
+> /archive-to-portal <run-id>/<unit-id>                # ship passing test to portal (manual)
 ```
 
 ## Why This Architecture
 
-- **Agent-first execution**: an LLM driving Chrome DevTools MCP can adapt step-by-step (look at the screenshot, decide the next action) — far more robust to UI variation than pre-written selectors.
-- **Playwright as the artifact, not the runtime**: the trace captured during execution is translated to `.spec.ts` only after the test passes — so what gets archived is a recording of a *known-working* path, not a guess.
-- **Reviewed archival, not automatic ingestion**: portal stays clean because nothing lands there until a human approves.
-- **Confidence gating**: Linear data is incomplete; the triage agent must be honest about uncertainty rather than guess.
+- **Agent-first execution**: an LLM that looks at the page and decides the next action is more robust to UI variation than pre-written selectors.
+- **Playwright as the artifact, not the runtime**: trace → `.spec.ts` happens only after the test passes, so what gets archived is a known-working recording.
+- **Reviewed archival**: portal stays clean because nothing lands there until a human approves.
+- **Confidence gating**: triage is honest about uncertainty (Linear data is incomplete) rather than guessing.

@@ -27,28 +27,30 @@ This agent flips both:
 ### Pipeline
 
 ```
-ticket IDs ──▶ fetch ──▶ triage ──▶ [confirm] ──▶ spec ──▶ execute ──▶ [review] ──▶ report ──▶ Linear comment
-                                                              │
-                                                       (drives Chrome
-                                                        via MCP, records
-                                                        every step)
-                                                              │
-                                                              ▼
-                                                  generated.spec.ts (only on PASS)
-                                                              │
-                                                  optional, manual:
-                                                  /archive-to-portal ──▶ <your-playwright-repo> branch
+ticket IDs ──▶ fetch ──▶ triage ──▶ [confirm] ──▶ data-plan ──▶ spec ──▶ execute ──▶ report ──▶ Linear comment
+                                                                            │              ▲
+                                                                     (drives Chrome  (per-unit:
+                                                                      via MCP,        each ticket's
+                                                                      records every    comment posts
+                                                                      step)            the moment its
+                                                                            │          unit finishes)
+                                                                            ▼
+                                                              generated.spec.ts (only on PASS)
+                                                                            │
+                                                              optional, manual:
+                                                              /archive-to-portal ──▶ <your-playwright-repo> branch
 ```
 
-### The six agents
+### The agents
 
 | Agent | Job | Reads | Writes |
 |---|---|---|---|
 | `linear-fetcher` | Pull ticket bodies, comments, attachments | Linear MCP | `01-fetch.json` |
 | `test-triage` | Decide test/skip per ticket; cluster into units; infer user role | `01-fetch.json` | `02-triage.json` |
-| `test-strategist` | Read each linked PR's diff and write a Requirement Spec grounded in shipped code | `02-triage.json`, GitHub MCP | `03-spec-<unit>.md` + `.json` sidecar |
-| `test-executor` | Drive Chrome step-by-step; record every action; evaluate Then-clauses | `03-spec-<unit>.json`, Chrome DevTools MCP | `trace.jsonl`, `screenshots/`, `result.json`, `generated.spec.ts` |
-| `linear-reporter` | Post a comment to each ticket with the result + screenshots | `result.json` | Linear comment |
+| `test-data-planner` | Decide create-fresh vs reuse-existing case per unit; pick fixtures by event-type coverage; auto-add manifest entries via Drive search | `02-triage.json`, GitHub MCP, `fixtures/manifest.json` | `02b-data-plan.json` |
+| `test-strategist` | Read each linked PR's diff and write a Requirement Spec grounded in shipped code; bind data_setup to the data plan | `02b-data-plan.json`, GitHub MCP | `03-spec-<unit>.md` + `.json` sidecar |
+| `test-executor` | Drive Chrome step-by-step; record every action; evaluate Then-clauses. **In-context runbook, not a sub-agent** — driven by the orchestrator's main session because Chrome DevTools MCP tools are deferred and don't propagate to spawned sub-agents. | `03-spec-<unit>.json`, `02b-data-plan.json`, Chrome DevTools MCP | `trace.jsonl`, `screenshots/`, `result.json`, `generated.spec.ts` |
+| `linear-reporter` | Post a comment to each ticket with the result + screenshots. Two modes: per-unit (one comment per ticket as each unit finishes) and aggregate (writes `05-summary.md` at end of run) | `result.json` | Linear comment + `05-summary.md` |
 | `portal-archiver` | (Manual) Adapt `generated.spec.ts` to your Playwright repo's conventions on a branch | `generated.spec.ts` | branch in `<your-playwright-repo>` |
 
 ### Confidence gating
@@ -61,15 +63,19 @@ Every run lands a directory under `artifacts/<run-id>/` (gitignored). The pipeli
 
 ```
 artifacts/<run-id>/
-├── 01-fetch.json              # raw Linear data
+├── 01-fetch.json               # raw Linear data
 ├── 02-triage.json              # decisions + confidence per ticket
-├── 03-spec-<unit>.md          # Requirement Spec (human-readable)
-├── 03-spec-<unit>.json        # same spec, machine-readable (the contract executor reads)
-└── 04-run-<unit>/
-    ├── trace.jsonl            # one JSON object per step (schema-validated)
-    ├── screenshots/           # PNGs at every checkpoint + on every failure
-    ├── result.json            # pass/fail per scenario (schema-validated)
-    └── generated.spec.ts      # Playwright translation — only on PASS
+├── 02b-data-plan.json          # per-unit case_decision (create_fresh / reuse_existing) + fixtures
+├── 03-spec-<unit>.md           # Requirement Spec (human-readable)
+├── 03-spec-<unit>.json         # same spec, machine-readable (the contract executor reads)
+├── 04-run-<unit>/
+│   ├── trace.jsonl             # one JSON object per step (schema-validated)
+│   ├── screenshots/            # PNGs at every checkpoint + on every failure
+│   ├── result.json             # pass/fail per scenario (schema-validated)
+│   └── generated.spec.ts       # Playwright translation — only on PASS
+├── case-group-<N>/
+│   └── case_id.txt             # the case the executor created/reused for this group; sibling units in the same group reuse it
+└── 05-summary.md               # final aggregated run report
 ```
 
 Schemas live in [`schemas/`](./schemas/); the validator is `scripts/validate-artifact.py`.
@@ -109,10 +115,7 @@ Inside a Claude Code session in this repo:
 
 Defaults to **prod**. Use `--env=stg` to switch. Natural language works too — `测试 LIN-123, LIN-456` is treated the same.
 
-The agent pauses for **user confirmation** twice:
-
-1. After triage, when any ticket is medium/low confidence or its user role can't be inferred.
-2. After execution, before reporting back to Linear, so you can review screenshots and the generated spec.
+The agent pauses for **user confirmation** only when triage is uncertain — medium/low confidence on any ticket, or an inferred user role that can't be derived from the ticket. A clean high-confidence triage runs straight through to reporting. Each ticket's Linear comment posts the moment its unit finishes executing, so the human sees per-ticket results in real time instead of waiting for the whole batch.
 
 ### Inspect a run
 
@@ -135,7 +138,7 @@ Adapts the spec to your Playwright repo's structure (pages/, fixtures, naming) a
 ```
 .claude/
   agents/                # one .md per sub-agent — these are the prompts
-  skills/                # /test-tickets, /archive-to-portal, /create-case
+  skills/                # /test-tickets, /create-case, /switch-account, /archive-to-portal, /retro
   settings.json          # checked-in: permissions allowlist, MCP servers
   settings.local.json    # gitignored: per-developer paths, secrets
   test-env.local.json    # gitignored: test-tenant credentials
@@ -158,11 +161,12 @@ CLAUDE.md                # operating manual the agents read on every session
 
 ## Hard rules at a glance
 
-- **No silent skips.** Every skipped ticket has a written reason.
-- **No production writes outside the test tenant.** Configured per-env in `test-env.local.json`.
-- **Linear-side relationships are the human owner's job.** This agent posts comments and nothing else — never `relatedTo` / `blocks` / `parentId`.
-- **No reload during a scenario unless the spec demands it.** Reload destroys evidence of "things that should update live but didn't"; that class of bug needs an explicit non-reload observation first.
+- **No silent skips.** Every skipped ticket has a written reason. Every Linear AC must map to a scenario in the spec — even when it requires a different user role than the unit's default (the executor switches accounts mid-run via `/switch-account`).
+- **Default to fresh test data.** If a unit needs specific data shape, the planner creates a new case with the right fixtures rather than hunting through the existing case pool. Reuse only when the user/spec names a case explicitly or the change is data-free.
 - **Spec is grounded in PR diffs, not ticket prose.** When the ticket promises X but the PR doesn't ship X, that's an Open question, not a scenario.
+- **No reload during a scenario unless the spec demands it.** Reload destroys evidence of "things that should update live but didn't"; that class of bug needs an explicit non-reload observation first.
+- **No production writes outside the test tenant.** Configured per-env in `test-env.local.json`.
+- **Linear-side relationships are the human owner's job.** This agent posts comments and nothing else — never `relatedTo` / `blocks` / `parentId`. Linear's mention parser auto-creates "related issue" backlinks from any ticket-id text in a comment body, so cross-ticket workflow context stays in local `05-summary.md`, never in the comment.
 
 Full operating manual for agent-side rules: **[CLAUDE.md](./CLAUDE.md)**.
 
