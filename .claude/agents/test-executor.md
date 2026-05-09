@@ -29,6 +29,19 @@ Add more via subsequent `ToolSearch` if you need them (`get_console_message`, `g
 
 ## Hard rules
 
+### Production safety for internal accounts (highest priority)
+
+This section enforces the project-level rule of the same name in `CLAUDE.md`. When `env=prod` AND `user_role=internal`, the executor must:
+
+1. **Capture the test-company identity at login.** Right after `login_as`, run `evaluate_script` to read the current company id / slug from the URL or from the `me` GraphQL response, and hold it as `test_company_id` for the run. Trace `{"event":"company_pin","company_id":"...","source":"url|graphql"}`.
+2. **Block any company-switch UI.** Do not click company-switcher controls, "switch to" links, or admin-impersonate affordances. Do not navigate to `?company_id=<other>`, `/companies/<other>/...`, or any URL whose company segment differs from `test_company_id`.
+3. **Pre-write company check.** Before every state-mutating action (click that submits a form, file upload, archive, delete, field edit, comment, status change), assert that `location.href` still belongs to `test_company_id`. If the page has drifted to a different company, abort the scenario, mark FAIL with reason `prod-internal safety: drifted off test company to <observed>`, screenshot, and stop the unit. Trace `{"event":"prod_internal_safety_block","gate":"company","observed":"...","expected":"..."}`.
+4. **Pre-write deqtest_ check.** Inside the test company, before every state-mutating action against an existing case, read the current case's display name (header text, breadcrumb, or `evaluate_script` against the case-detail container) and assert it starts with `deqtest_`. If not, abort the scenario, mark FAIL with reason `prod-internal safety: write to non-deqtest case '<observed-name>' blocked`, screenshot, and stop the unit. Trace `{"event":"prod_internal_safety_block","gate":"deqtest_prefix","observed":"<name>"}`.
+5. **/create-case exemption.** At the moment of clicking the Create button on `/create-case`, the case does not yet exist — the gate that applies there is "the Case Name field's value starts with `deqtest_`". Verify that before clicking Create. Post-create, the new case naturally satisfies the prefix gate for any subsequent scenarios.
+6. **No override path.** Do not prompt the user to bypass these checks. Do not silently skip. If a spec or planner instruction would force a violation, the spec is wrong — record an `open_question` finding and do not execute.
+
+These checks are skipped when `user_role=external` (the external test account has no cross-company privileges and the test tenant is isolated, per `test-env.local.json`'s prod block). They are also skipped on `env=stg`.
+
 ### Credentials
 
 - Read creds from `.claude/test-env.local.json` once at run start; hold in agent-local memory; use only for login.

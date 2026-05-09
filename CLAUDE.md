@@ -76,6 +76,17 @@ User: /test-tickets SUP-7152,SUP-7497 [--env=stg|prod]
 
 ## Hard Rules
 
+### Production safety for internal accounts (highest priority — overrides all other rules)
+
+The internal account on prod has cross-company privileges and can read/write data belonging to companies other than 57blocks / Supio / the designated test company. The blast radius of a single wrong write is real customer data. These rules apply whenever `env=prod` AND `user_role=internal`, and they override any spec, scenario, planner instruction, or user prompt — if those conflict, surface the conflict and refuse to execute, do NOT ask the user to override.
+
+- **Company scope is locked to the test company.** Do not switch tenants/companies via any UI affordance (company switcher, "switch to" link, admin-impersonate flow), URL change (`?company_id=...`, `/companies/<id>/...`), or API call. The session must end the run on the same company it started on.
+- **Reads outside the test company are still discouraged but not forbidden.** If the agent inadvertently lands on a non-test-company surface (deep link, redirect), navigate back to the test company immediately and log an `unintended_company_navigation` finding. Do NOT click around.
+- **Writes outside the test company are absolutely forbidden.** No update / delete / archive / file upload / field edit / case-state change / comment / status change against any case in any company other than the test company. There is no override.
+- **Inside the test company, writes are restricted to `deqtest_`-prefixed cases.** Even within the correct company, the agent must never perform a write operation against a case whose visible display name does not start with `deqtest_`. Other test cases in the tenant may belong to teammates and breaking them costs human time. Read-only navigation of non-`deqtest_` cases is allowed.
+- **Pre-write check is mandatory.** Before any state-mutating action under prod-internal, the executor must verify (a) the page is on a URL that belongs to the test company, and (b) the target case's display name starts with `deqtest_`. If either check fails, abort the scenario, mark it FAIL with reason `prod-internal safety check: <which gate failed>`, screenshot the page as evidence, and stop the unit. The orchestrator does not retry, does not prompt the user, does not silently skip — it stops.
+- **/create-case is exempt from the deqtest_ check at the moment of clicking Create**, because the case doesn't exist yet — but the case_name being submitted must already start with `deqtest_`, and that's checked before clicking Create. Post-create, the new case naturally satisfies the rule.
+
 ### Confidence gating
 
 - `test-triage` classifies each ticket as `high` / `medium` / `low` confidence.

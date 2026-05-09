@@ -1,7 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "env": {
-    "PLAYWRIGHT_REPO_PATH": "/absolute/path/to/<your-playwright-repo>"
+    "PLAYWRIGHT_REPO_PATH": "/absolute/path/to/<your-playwright-repo>",
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
   },
   "permissions": {
     "additionalDirectories": [
