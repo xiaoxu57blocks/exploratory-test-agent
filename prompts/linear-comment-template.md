@@ -31,15 +31,13 @@ The comment body starts directly with the Result line. No title heading, no prea
 ### Evidence
 
 **[FAIL] Scenario N — <short title>**
-Steps: <numbered steps the executor took, e.g. "1. Opened Filter popover. 2. Bookmarked event via ⋯ menu. 3. Re-opened Filter popover.">
-Observed: <what actually happened>. Expected: <what should have happened>.
+Observed: <what actually happened — one sentence>.
 
 ![<ticket-lower>-sN-FAIL-<slug>](https://uploads.linear.app/...)
 
 <details><summary>✅ PASS scenarios</summary>
 
 **[PASS] Scenario N — <short title>**
-<One or two sentences: what the picture proves, not what the picture is.>
 
 ![<ticket-lower>-sN-PASS-<slug>](https://uploads.linear.app/...)
 
@@ -85,10 +83,8 @@ Observed: <what actually happened>. Expected: <what should have happened>.
 ### Evidence
 - **Order: all FAIL screenshots first, then all PASS screenshots.** Do not interleave by spec scenario number.
 - **PASS screenshots must be wrapped in a `<details>` block** with the summary line `✅ PASS scenarios`. All PASS entries go inside one shared `<details>` block, not one block per scenario.
-- **FAIL captions must include explicit test steps.** Format:
-  - Line 1: `Steps: <numbered steps the executor took>`
-  - Line 2: `Observed: <actual result>. Expected: <expected result>.`
-- **PASS captions**: 1–2 sentences on what the picture proves, no steps required.
+- **FAIL captions**: one `Observed:` line only — what actually happened. Steps and expected result are already in the Scenarios table; do not repeat them.
+- **PASS captions**: omitted — the screenshot title is sufficient. The Scenarios table already states what was expected and the verdict is ✅.
 - Skip only for non-visual scenarios (pure network-observation); note the skip in the caption.
 - Section heading is always `### Evidence` (singular, never `### Screenshots`).
 - **Always call `scripts/attach-screenshot-to-comment.py`** — never inline base64 or raw upload calls.
