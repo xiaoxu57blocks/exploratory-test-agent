@@ -132,7 +132,9 @@ The Pre-flight step in `test-executor` reads exactly the `feature_flags` bullets
    - For repo lookup: linked PR URLs in `01-fetch.json` look like `https://github.com/<owner>/<repo>/pull/<num>` — parse owner / repo / pull_number and pass them to the GitHub tools.
    - **Read each non-test source file's patch in full.** Tests (`*.test.tsx` / `*.test.ts`) are useful as a secondary spec — they tell you which states the author thought worth verifying — but the production code is what actually runs in prod. Don't skim either; `displayState`, conditional rendering, and per-user gates are easy to miss in a 200-line patch.
    - If `mcp__github__get_pull_request_files` returns 404 or "Not Found", record the PR number under **Open questions** and stop — do not fall back to writing scenarios from ticket prose alone, which is what burned the previous SUP-7623 run (we tested an entirely different component than the PR introduced because we couldn't see the code). A missing diff is a hard blocker, not a soft one.
-4b. **Run the three-pass gate scan** (see Feature flag detection above) on every PR diff you just read. Produce a gate inventory before writing any scenarios:
+4b. **Consult the feature flag context before scanning.** Read `context/feature-flags/index.md` first. For each flag listed there whose gated path appears in the PR diff (e.g. a changed file under `src/packages/app-v2/` → `feature-case-agent`), load the corresponding detail file (e.g. `context/feature-flags/app-v2.md`) and apply its rules. These context rules catch flags that are **never mentioned in the diff itself** — they exist at the routing/rendering layer above the changed code and will be missed by grep alone.
+
+4c. **Run the three-pass gate scan** (see Feature flag detection above) on every PR diff you just read. Produce a gate inventory before writing any scenarios:
    - List A: feature flags requiring `/toggle-feature-flag` → goes into `preconditions.feature_flags`
    - List B: data gates requiring case-creation or navigation state → goes into `preconditions.visibility_gates`
    - List C: unknown gates (getter definition not accessible) → goes into **Open questions**

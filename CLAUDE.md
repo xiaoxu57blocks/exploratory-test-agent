@@ -102,6 +102,10 @@ The internal account on prod has cross-company privileges and can read/write dat
 - The agent reads credentials from the local config file at runtime and **never echoes passwords into chat, logs, artifacts, or commit messages**.
 - Production tests run against an **isolated test tenant** — writes do not affect real customer data.
 
+### Feature flag conventions (Portal business context)
+
+Business rules for feature flags live in `context/feature-flags/`. The index is at `context/feature-flags/index.md` — one row per known flag, with a pointer to the detail file. Agents consult this directory when analyzing which flags a test scenario requires (see `test-strategist.md` step 4b).
+
 ### Artifacts directory
 
 - Every run creates a unique directory: `artifacts/<YYYY-MM-DD_HHMM>_<first-ticket-id>/`.
