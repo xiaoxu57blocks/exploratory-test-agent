@@ -22,6 +22,7 @@ For the given run-id, read:
 - `artifacts/<run-id>/03-spec-<unit_id>.md` — the spec the executor was working from. Many interventions point back to gaps in this file.
 - The agent and skill files under `.claude/agents/` and `.claude/skills/` — the targets of any proposed changes.
 - `prompts/strategy-template.md` — also a possible target.
+- `context/` — business rules that agents load on demand. Read `context/README.md` to understand its structure before deciding whether a proposal belongs here.
 
 ## What counts as a real intervention
 
@@ -61,12 +62,13 @@ Write `artifacts/<run-id>/06-retro.md` with this structure:
 **Why this is a rule gap, not a one-off:** <why it would happen again on the next ticket>
 
 **Proposed change:**
-- File: `.claude/agents/<x>.md` (or skill / template)
-- Section: <heading the change goes under>
+- File: `.claude/agents/<x>.md` | `.claude/skills/<x>.md` | `prompts/<x>.md` | `context/<topic>/<x>.md` *(new file)* | `context/<topic>/index.md` *(add pointer)*
+- Section: <heading the change goes under, or "new file" if proposing a new context detail file>
 - Diff sketch:
   ```
   + <new rule, in the imperative voice the file uses>
   ```
+  *(For a new `context/` file, show the full frontmatter + body instead of a diff.)*
 - Confidence: high | medium | low (low = "this might just be one-off, judge yourself")
 
 ### 2. ...
@@ -85,7 +87,14 @@ Write `artifacts/<run-id>/06-retro.md` with this structure:
 1. Confirm `artifacts/<run-id>/interventions.jsonl` exists. If not, stop with a clear message.
 2. Read it. Read the trace, spec, and result for the same run.
 3. For each user-prompt entry, decide: is this a real intervention by the rules above? If yes, find the matching `orchestrator_note` (close in time) for the "what the agent did next" half. If no orchestrator note exists, infer from trace.
-4. For each real intervention, look at the relevant agent/skill/template file and draft a specific addition. The rule must be **concrete and actionable** — "the strategist should be more thorough" is useless; "the strategist should call `mcp__linear__get_diff` on every GitHub attachment in 01-fetch.json and grep for `feature-*`" is useful.
+4. For each real intervention, classify the fix target before drafting the rule:
+
+   - **Agent/skill/template file** (`.claude/agents/`, `.claude/skills/`, `prompts/`) — use this when the gap is in **how** an agent behaves: its decision logic, its workflow steps, its output schema.
+   - **`context/` business rule** — use this when the gap is a **domain fact the agent didn't know**: a feature flag's scope, a UI pattern, a product constraint, a skip/scope rule (e.g. "pure-UI tickets should be skipped", "tickets in project X always need the `feature-case-agent` flag"). These belong in `context/<topic>/` as a detail file, with a pointer added to `context/<topic>/index.md`. Read `context/README.md` for the exact convention before proposing a new file.
+
+   The distinction matters: agent-file rules change *behaviour*; context rules change *knowledge*. Putting a knowledge fact into an agent file makes it invisible to other agents and harder to update. When in doubt, prefer `context/` for anything a product manager would recognise as a business rule.
+
+   The rule must be **concrete and actionable** — "the strategist should be more thorough" is useless; "the strategist should call `mcp__linear__get_diff` on every GitHub attachment in 01-fetch.json and grep for `feature-*`" is useful.
 5. Write `06-retro.md`. Do not modify any agent or template file directly — `/retro` is read-only by design. The user reviews the retro and applies whichever proposals they agree with.
 6. Return a one-paragraph summary: how many interventions identified, how many rejected, and which 1–2 are most worth the user's attention.
 
@@ -102,4 +111,5 @@ Write `artifacts/<run-id>/06-retro.md` with this structure:
 - ❌ Treating every user prompt as an intervention. Most are not.
 - ❌ Generic recommendations ("be more careful", "improve testing"). Every proposal must name a file and a section.
 - ❌ Proposing a rule that already exists. Read the target file first; if the rule is there and was ignored, the right fix is somewhere else (often the orchestrator's hard rules), not duplication.
+- ❌ Putting business knowledge into agent files. If the intervention was "you should have known X about the product", the fix is a `context/` file, not a paragraph buried in `test-strategist.md`.
 - ❌ Editing agents/skills directly. Output is a markdown report; the user applies the changes.
