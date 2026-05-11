@@ -141,6 +141,10 @@ Each agent's tools, inputs, and detailed rules live in its own `.claude/agents/<
 |-------|---------|---------|
 | `/test-tickets` | `/test-tickets SUP-XXX[,SUP-YYY,...] [--env=prod\|stg]` | Main pipeline (fetch → triage → spec → execute → report) |
 | `/archive-to-portal` | `/archive-to-portal <run-id>/<unit-id>` | Manual: ship `generated.spec.ts` to portal repo on a branch |
+| `/create-case` | `/create-case [case-name] [--kind <type>] [--add <fixture>]` | Create a fresh AI-artifact-first test case in the Portal with fixture upload; called by executor during data-setup phase |
+| `/switch-account` | `/switch-account --role internal\|external [--env prod\|stg]` | Switch the logged-in Portal account mid-run via the avatar-menu logout; preserves localStorage feature-flag overrides |
+| `/toggle-feature-flag` | `/toggle-feature-flag --flag <name> on\|off` | Enable or disable a Portal feature flag via localStorage override + reload; checks backend entitlement first and refuses if the flag is not granted server-side |
+| `/retro` | `/retro <run-id>` | Post-run retrospective: reads `interventions.jsonl`, identifies agent behavior gaps, and writes `06-retro.md` with concrete fix proposals per agent/skill/template file |
 
 ### Trigger styles
 
@@ -171,6 +175,19 @@ The Linear MCP server uses OAuth on first run; no API token needed. Ticket IDs a
 ./scripts/verify-mcp.sh                                # smoke-check Linear MCP
 ls artifacts/<run-id>/                                 # inspect a run's artifacts
 > /archive-to-portal <run-id>/<unit-id>                # ship passing test to portal (manual)
+> /retro <run-id>                                      # post-run retro → artifacts/<run-id>/06-retro.md
+
+# Fixture management
+python3 scripts/get-fixture.py --list                  # list all fixtures in manifest
+python3 scripts/get-fixture.py --name "MRnMB.pdf"     # download fixture to cache
+
+# Artifact validation (run after executor writes result.json / trace.jsonl)
+python3 scripts/validate-artifact.py --kind result --path artifacts/<run-id>/04-run-unit-1/result.json
+python3 scripts/validate-artifact.py --kind trace  --path artifacts/<run-id>/04-run-unit-1/trace.jsonl
+
+# First-time setup
+./scripts/install-shell-hooks.sh                       # auto-load .claude/settings.local.json env on cd
+python3 scripts/google-drive.py auth                   # authenticate Google Drive for fixture downloads
 ```
 
 ## Why This Architecture

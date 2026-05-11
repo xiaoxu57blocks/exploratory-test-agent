@@ -51,8 +51,7 @@ Before any browser action:
 
 1. The Chrome DevTools MCP is connected (the test-tickets pipeline should already have set this up; if invoked standalone, call `mcp__chrome-devtools__list_pages` first to confirm).
 2. The user is signed in to `https://portal.supio.com` as the external test account (Supio Test). If `/create-case` redirects to login, fail with a clear "log in via the test-env credentials, then re-run" error rather than attempting to log in here — auth is the test-executor's job, not this skill's.
-3. The `feature-ai-artifact-first` flag is on for that user (verify by reading `localStorage.enabledFeatureFlags`). If missing, refuse — the AI-first surface won't render and the panel under test will never mount; the user needs to enable the flag (or the executor's pre-flight should have done so).
-4. Resolve every fixture name to a local cached path:
+3. Resolve every fixture name to a local cached path:
 
    ```bash
    scripts/get-fixture.py --name "<fixture-name>"
@@ -81,7 +80,7 @@ Before any browser action:
 - **Test tenant only.** The flows here write to prod. The test account `user@test.supio` lives in an isolated tenant per `CLAUDE.md`'s test-environment rule; never invoke this skill while signed in as a real internal user.
 - **Don't ask the user to pick fixtures by default.** Defaults are good enough for AI-first scenarios; only prompt if (a) the user explicitly passed `--with` with names not in the manifest, or (b) `get-fixture.py` returned `ok: false` and the user needs to drop a file manually.
 - **Don't hardcode Drive file ids inside this skill or the script's caller.** All ids live in `fixtures/manifest.json`; the manifest is the contract.
-- **Don't bypass `feature-ai-artifact-first`.** A case created without that flag at create-time is permanently bound to the legacy pipeline (observed regression) and the AI-first panel will never mount on it. If the flag is off, refuse.
+- **Case kind determines the V2 timeline, not a localStorage feature flag.** `TimelinePage.tsx` gates `ArtifactFirstTimelineV2` purely on `job_meta.ai_first` — a data property set by the backend at case-creation time based on case kind. Creating the case as "AI-artifact-first MVA" is what sets this; `/toggle-feature-flag` cannot substitute for it. Note: `feature-ai-artifact-first` *does* exist as a flag (it gates the AI Ledger label and some file-approval components), but it does NOT gate the V2 timeline mount — `TimelinePage.tsx` explicitly has no flag check ("No feature flag — the job_meta value is the contract").
 
 ## Anti-patterns
 

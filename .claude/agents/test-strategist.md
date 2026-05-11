@@ -50,7 +50,23 @@ Every spec MUST contain:
 Linked PRs almost always reveal the flags that gate the change. Before writing the spec:
 
 1. **Pull each PR via the Linear MCP**: for every GitHub attachment in `01-fetch.json`, call `mcp__linear__get_diff` with the PR URL. The Linear MCP returns metadata; for the actual diff content, also try `mcp__linear__get_diff_threads`.
-2. **Grep the diff (or PR title/body) for flag references**: `feature-*`, `feature_*`, `isFeatureFlagEnabled("...")`, `enabledFeatureFlags`, `LaunchDarkly`, `posthog`. Note both the **flag key** and **what it gates** (a UI surface, an agent tool, an API route).
+2. **Scan the diff in three passes** — each pass catches a different class of gate:
+
+   **Pass A — direct flag references** (grep for these literal strings in the diff):
+   - `useFeatureFlag(`, `isFeatureFlagEnabled(`, `enabledFeatureFlags`, `feature-`, `feature_`
+   - `LaunchDarkly`, `posthog`, `FeatureFlag`, `flagEnabled`
+   - Each hit → record the flag key string and what it gates.
+
+   **Pass B — MobX / store getter wrappers** (common Supio pattern — a getter that internally checks a flag):
+   - grep for `is[A-Z][a-zA-Z]+` and `has[A-Z][a-zA-Z]+` getter calls on `jobStore`, `userStore`, `featureStore`, or any store imported at the top of the changed file.
+   - For each getter found, follow it to its definition (use `mcp__github__get_file_contents` on the store file if it wasn't part of the diff). If the getter body calls `useFeatureFlag` or reads `enabled_feature_flags`, it is a **flag gate** — record the underlying flag key. If it reads `job_meta`, `case.type`, or similar runtime data, it is a **data gate** — record it under `visibility_gates`, not `feature_flags`.
+   - Example: `jobStore.isSelectedGroupJobAiFirst` → check the store → reads `job_meta.ai_first` → data gate, not a flag.
+   - Example: `featureStore.isCaseAgentEnabled` → check the store → calls `useFeatureFlag('feature-case-agent')` → flag gate, record it.
+
+   **Pass C — conditional imports / lazy components** (easy to miss):
+   - Look for `React.lazy`, dynamic `import(...)`, or `if (flag) { const Component = require(...) }` patterns.
+   - These are flags too — the component never mounts unless the flag is on.
+
 3. **List each flag in Preconditions** under `Feature flags`, one bullet per flag, in this shape:
    - `feature-<name>` — `enable_required` (gates: <what it gates per the diff>)
    - If the diff shows the flag has multiple values (e.g. variants), list expected value.
@@ -59,8 +75,15 @@ Linked PRs almost always reveal the flags that gate the change. Before writing t
    - Direct gate on the feature under test → `enable_required`
    - Adjacent flag the agent must respect (e.g. `feature-case-agent` enabling the surface that hosts the new tools) → `enable_required, reason: hosts the surface`
    - Kill-switch / cleanup flag → `must_be_off`
+5. **Record data gates separately** under `Preconditions → Visibility gates` (not under `Feature flags`). Data gates are conditions like `job_meta.ai_first = 'true'`, `case.type === 'mva'`, or `wasEverProcessing === true` that the executor must satisfy through case-creation or navigation, not through `/toggle-feature-flag`. Shape:
+   - `name` — what the gate is called in the code
+   - `where_in_diff` — file + brief description
+   - `default_state` — open or closed
+   - `how_to_open` — what the executor must do (e.g. "create case as AI-artifact-first MVA")
 
-The Pre-flight step in `test-executor` reads exactly these bullets and enables them before scenarios run, so the format must be machine-greppable: keep one flag per bullet, key first, then a dash, then the directive.
+   The distinction matters: `/toggle-feature-flag` only handles localStorage-override flags; it cannot change `job_meta`. Conflating them causes the executor to attempt a localStorage write for a data gate and silently fail.
+
+The Pre-flight step in `test-executor` reads exactly the `feature_flags` bullets and enables them before scenarios run, so the format must be machine-greppable: keep one flag per bullet, key first, then a dash, then the directive.
 
 ## Rules
 
@@ -109,6 +132,13 @@ The Pre-flight step in `test-executor` reads exactly these bullets and enables t
    - For repo lookup: linked PR URLs in `01-fetch.json` look like `https://github.com/<owner>/<repo>/pull/<num>` — parse owner / repo / pull_number and pass them to the GitHub tools.
    - **Read each non-test source file's patch in full.** Tests (`*.test.tsx` / `*.test.ts`) are useful as a secondary spec — they tell you which states the author thought worth verifying — but the production code is what actually runs in prod. Don't skim either; `displayState`, conditional rendering, and per-user gates are easy to miss in a 200-line patch.
    - If `mcp__github__get_pull_request_files` returns 404 or "Not Found", record the PR number under **Open questions** and stop — do not fall back to writing scenarios from ticket prose alone, which is what burned the previous SUP-7623 run (we tested an entirely different component than the PR introduced because we couldn't see the code). A missing diff is a hard blocker, not a soft one.
+4b. **Run the three-pass gate scan** (see Feature flag detection above) on every PR diff you just read. Produce a gate inventory before writing any scenarios:
+   - List A: feature flags requiring `/toggle-feature-flag` → goes into `preconditions.feature_flags`
+   - List B: data gates requiring case-creation or navigation state → goes into `preconditions.visibility_gates`
+   - List C: unknown gates (getter definition not accessible) → goes into **Open questions**
+
+   An empty list A is a valid result — state explicitly "No feature flags found in diff." Do not skip this step on the assumption that the ticket already told you. The ticket is often wrong or incomplete.
+
 5. Cross-reference the ticket's "in scope" / acceptance criteria against the PR diff. For every behavior the ticket promises, find the file(s) and line range(s) in the diff that implement it. The set of behaviors that have a clear implementation in the diff = the set of scenarios you may write. Ticket-promised behaviors with no matching code go into **Open questions** ("ticket lists X but PR #N has no implementation of it"), not into the scenarios list.
 6. For each scenario you intend to write, verify the **Given-state is reproducible on the target env** (see Rules). If not, drop it and record the reason in **Out of scope**.
 7. Write **both** the markdown spec at `artifacts/<run-id>/03-spec-<unit_id>.md` and the JSON sidecar at `artifacts/<run-id>/03-spec-<unit_id>.json`. The JSON sidecar must conform to `schemas/run-spec.schema.json`; see the schema for required fields and shape. Each scenario in the JSON has `given`, `when`, `then` as separate fields (split out from the markdown's Given/When/Then prose) so the executor doesn't have to parse English.
