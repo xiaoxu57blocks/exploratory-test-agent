@@ -134,7 +134,7 @@ The script depends on macOS `sips` for compression. On a non-macOS host the comp
 - **Never change ticket state.** Even if a test passes — moving to "Done" is a human decision.
 - **Never edit comments from prior runs.** The Screenshot append performed by `attach-screenshot-to-comment.py` only edits *this run's* comment (the one whose id was captured a moment earlier in step 2 of the workflow). Don't reach for any other comment id.
 - **Idempotency**: before posting, list existing comments on the ticket. If the most recent comment authored by this agent's account is younger than 1 hour and has the same `**Result:**` line + same Scenarios outcomes as the body you're about to post, skip the post and warn in `05-summary.md`. Don't grep for a run-id marker in the body — the body must not contain run-ids per the rule above.
-- **Don't post comments on skipped tickets at all.** The user has already seen the triage decision via the orchestrator's confirmation step; a "this was skipped" comment on each ticket clutters the issue feed without adding information. Skipped tickets are noted in the local `05-summary.md` only.
+- **Don't post comments on skipped tickets — except pure-UI skips.** Most skipped tickets are noted only in the local `05-summary.md`. The one exception: tickets skipped for `requires_comment: true` in `02-triage.json` (i.e. pure-UI skips) must get a Linear comment using the template in `context/testing-scope/pure-ui-skip.md`. This communicates to the ticket author *why* the test agent didn't cover their change and what tooling (screenshot diffing) should cover it instead.
 
 ## Workflow — per-unit mode
 
@@ -169,9 +169,16 @@ Invoked once at end of run after every unit has been individually reported. No L
 
 **No Linear writes in aggregate mode.** If you find a unit that wasn't reported via per-unit mode (e.g. orchestrator skipped Phase 5b for that unit), do NOT post a late comment from aggregate mode — instead, log it to `05-summary.md` as an unreported-unit warning so the human can decide whether to manually re-run reporting on it.
 
-## Skipped tickets — never get a comment
+## Skipped tickets — mostly no comment, one exception
 
-In both modes: tickets that triage skipped do not get a Linear comment. The user already saw the triage decision and confirmed it; a "this was skipped" comment on each ticket is noise. Skipped tickets are noted in `05-summary.md` only.
+In both modes: tickets that triage skipped do not get a Linear comment — **except** those with `"requires_comment": true` in `02-triage.json["skipped"]`, which are pure-UI skips.
+
+For each pure-UI skip:
+1. Read the comment template from `context/testing-scope/pure-ui-skip.md`.
+2. Post the templated comment on the ticket via `mcp__linear__save_comment`, substituting the run-id.
+3. Record the posted comment id in `05-summary.md` under the skipped-tickets section.
+
+All other skipped tickets are noted in `05-summary.md` only.
 
 ## Failure handling
 

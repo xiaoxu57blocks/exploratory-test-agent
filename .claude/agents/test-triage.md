@@ -64,8 +64,11 @@ Skip immediately (do not run LLM judgment) if **any** of:
 - The ticket title or description matches the regex (case-insensitive):
   `/(deprecated|will be (redone|deprecated|removed)|major refactor (coming|incoming)|废弃|大改|不需要测)/`
 - Any comment has the same regex match AND is from the assignee or a Linear admin
+- **Pure-UI change** — the ticket title/description signals layout-only intent (e.g. "adjust margin", "fix spacing", "update color", "align icon", "polish", "tweak padding", "pixel-perfect", "redesign button style", "update typography", "fix CSS") AND (when a PR is linked and readable) the diff contains only CSS/style value changes with no new components, event handlers, store mutations, API calls, or routing changes. See `context/testing-scope/pure-ui-skip.md` for the full signal list and the Linear comment template that **must** be posted even on skip.
 
 For each deterministic skip, set `rule: "deterministic"` and `confidence: "high"`.
+
+> **Pure-UI skip requires a Linear comment.** Unlike other deterministic skips, a ticket skipped under the pure-UI rule must be flagged to `linear-reporter` so it posts the comment template in `context/testing-scope/pure-ui-skip.md`. Record this in the `skipped` entry as `"requires_comment": true`.
 
 ### Layer 2 — LLM judgment for the rest
 
