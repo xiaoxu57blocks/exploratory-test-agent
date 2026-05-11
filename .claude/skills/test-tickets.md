@@ -158,6 +158,34 @@ To archive a passing test to portal:
   /archive-to-portal <run-id>/<unit-id>
 ```
 
+## Parallel execution (deferred — do not implement yet)
+
+The current pipeline is intentionally sequential: one unit at a time, one Chrome session. This section captures the agreed future design so the team does not re-debate it.
+
+### Problem
+
+Tickets like SUP-7275 force ~10 min of idle wait while server-side processing (e.g. `case_graph_data` generation) completes. During that wait Chrome is unused — another ticket's early phases (fetch, triage, strategy) or even executor steps could run.
+
+### Agreed approach: Mode A + Mode C
+
+- **Mode C (free — implement first):** Phases 1–3 (linear-fetcher, test-triage, test-strategist) are filesystem-only sub-agents with no Chrome dependency. For a multi-ticket run these three phases can be parallelised across all units before any executor work begins.
+- **Mode A (cooperative scheduler):** The executor shares one Chrome. Each unit gets a lane file at `artifacts/<run-id>/lanes/<unit_id>.json` recording `pending_resume_at`. The orchestrator main loop picks whichever lane is ready next; if all lanes are waiting, it calls `ScheduleWakeup` to the nearest `pending_resume_at`.
+
+### Flag conflict policy
+
+Before interleaving two units in the same Chrome, the orchestrator must pre-compute their required flag sets (from the spec sidecars). Units whose flag sets are **compatible** may interleave. Units whose flags **conflict** must run serially — one unit completes Phase 5 fully before the next enters it.
+
+Example: a unit needing `feature-case-agent=OFF` and a unit needing `feature-case-agent=ON` cannot share a Chrome session.
+
+### What NOT to do
+
+- Do not add multi-Chrome (`isolatedContext`) speculatively — validate Chrome DevTools MCP behavior under Mode A first; multi-Chrome is the riskiest path.
+- Do not relax the "sequential phases within a single unit" rule. Only inter-unit interleaving is in scope; intra-unit execution stays linear.
+
+### Trigger
+
+Revisit this design after a run with a real long-wait ticket produces concrete idle-time data to validate the assumption.
+
 ## Hard rules
 
 - **Pause for user confirmation between phases 2→3 only when triage produced `needs_user_review` items.** A clean high-confidence triage proceeds straight through. Phase 4 (confirm-before-execute) was removed: with `prod.external` in `test-env.local.json` always pointing at the isolated test tenant, and with the run-id printed at Phase 0, the previous prod warning was friction without protection.
