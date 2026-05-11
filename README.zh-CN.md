@@ -144,7 +144,7 @@ review 完 `generated.spec.ts` 之后：
 ```
 .claude/
   agents/                # 每个 sub-agent 一个 .md —— 这就是它们的 prompt
-  skills/                # /test-tickets、/create-case、/switch-account、/archive-to-portal、/retro
+  skills/                # /test-tickets、/create-case、/switch-account、/toggle-feature-flag、/archive-to-portal、/retro
   settings.json          # 入库：权限白名单、MCP servers
   settings.local.json    # gitignored：个人路径、密钥
   test-env.local.json    # gitignored：测试租户凭证
@@ -152,6 +152,10 @@ artifacts/               # gitignored：每次运行的产物
 fixtures/
   manifest.json          # 入库：fixture 名 → Drive file id 映射
   cache/                 # gitignored：下载下来的 PDF
+prompts/
+  linear-comment-template.md  # Linear 评论格式的唯一权威来源
+  strategy-template.md        # test-strategist 用的 Requirement Spec 模板
+  triage-rules.md             # test-triage 的确定性分诊规则
 schemas/                 # spec / trace / result 的 JSON Schema
 scripts/
   attach-screenshot-to-comment.py   # 压缩 + 上传 + 删除附件的小工具

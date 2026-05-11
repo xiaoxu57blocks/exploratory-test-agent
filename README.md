@@ -145,7 +145,7 @@ Adapts the spec to your Playwright repo's structure (pages/, fixtures, naming) a
 ```
 .claude/
   agents/                # one .md per sub-agent — these are the prompts
-  skills/                # /test-tickets, /create-case, /switch-account, /archive-to-portal, /retro
+  skills/                # /test-tickets, /create-case, /switch-account, /toggle-feature-flag, /archive-to-portal, /retro
   settings.json          # checked-in: permissions allowlist, MCP servers
   settings.local.json    # gitignored: per-developer paths, secrets
   test-env.local.json    # gitignored: test-tenant credentials
@@ -153,6 +153,10 @@ artifacts/               # gitignored: per-run outputs
 fixtures/
   manifest.json          # checked-in: fixture name → Drive file id mapping
   cache/                 # gitignored: downloaded PDFs
+prompts/
+  linear-comment-template.md  # single source of truth for Linear comment format
+  strategy-template.md        # Requirement Spec template for test-strategist
+  triage-rules.md             # deterministic triage rules for test-triage
 schemas/                 # JSON Schemas for spec / trace / result
 scripts/
   attach-screenshot-to-comment.py   # compress + upload + delete attachment shim
