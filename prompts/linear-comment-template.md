@@ -15,8 +15,11 @@ The comment body starts directly with the Result line. No title heading, no prea
 <1–2 sentences. If FAIL, lead with what broke. If PASS, one sentence is enough.>
 
 ### Scenarios
-- ✅ <scenario title>
-- ❌ <scenario title> — <one-line failure reason>
+
+| **Test Point** | **Test Steps** | **Expected Result** | **Test Result** |
+| -- | -- | -- | -- |
+| <scenario title> | 1. <step> 2. <step> … | <what should happen> | ✅ Pass |
+| <scenario title> | 1. <step> 2. <step> … | <what should happen> | ❌ Fail — <one-line reason> |
 
 ### Notable findings
 - **[Product]** <system under test does not match spec/PR diff — product bug or scope-cut>
@@ -60,10 +63,13 @@ Observed: <what actually happened>. Expected: <what should have happened>.
 - PASS: one sentence is enough.
 
 ### Scenarios
-- Every active scenario in the spec gets a line — `✅` or `❌`. No `⏭`, no `not_run`.
+- Render as a four-column table: **Test Point | Test Steps | Expected Result | Test Result**.
+- Every active scenario in the spec gets one row — no `⏭`, no `not_run`.
 - `[skip-on-this-pass]` scenarios are **not listed** — they are explicitly out of scope.
-- `❌` lines carry one short failure reason (a clause, not a paragraph). The screenshot carries the rest.
-- `✅` lines need no reason — the name is enough.
+- **Test Point**: the scenario title (concise noun phrase, not a full sentence).
+- **Test Steps**: numbered inline steps, e.g. `1. Open Case Agent. 2. Send a message. 3. Refresh.`  Keep each step to ≤10 words.
+- **Expected Result**: one sentence — what a passing outcome looks like.
+- **Test Result**: `✅ Pass` or `❌ Fail — <one-line reason>`. The screenshot in Evidence carries the detail; keep the reason short (a clause, not a paragraph).
 
 ### Notable findings
 - Use the bracketed lead-in tags: `[Product]`, `[Warning]`, `[Spec]`, `[Env]`, `[Info]`.
@@ -96,7 +102,8 @@ Observed: <what actually happened>. Expected: <what should have happened>.
 ## Hard limits
 
 - **≤ 250 words total** (excluding Evidence captions and images).
-- **≤ 8 bullets** across Scenarios + Notable findings combined.
+- **Scenarios table**: no row limit, but keep Test Steps concise (≤ 10 words per step).
+- **Notable findings**: ≤ 3 bullets.
 - **No emoji** except ✅ and ❌ in the Scenarios list.
 
 ---
