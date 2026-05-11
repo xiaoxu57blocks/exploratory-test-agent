@@ -106,6 +106,8 @@ The internal account on prod has cross-company privileges and can read/write dat
 
 Business rules for feature flags live in `context/feature-flags/`. The index is at `context/feature-flags/index.md` — one row per known flag, with a pointer to the detail file. Agents consult this directory when analyzing which flags a test scenario requires (see `test-strategist.md` step 4b).
 
+**Adding new rules:** See `context/README.md` for the full convention — where to put the file, how to update the index, and commit message format. Do not add business rules directly into CLAUDE.md. When asked to add a business rule, read `context/README.md` first and follow the conventions there.
+
 ### Artifacts directory
 
 - Every run creates a unique directory: `artifacts/<YYYY-MM-DD_HHMM>_<first-ticket-id>/`.
