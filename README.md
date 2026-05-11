@@ -55,9 +55,9 @@ ticket IDs ──▶ fetch ──▶ triage ──▶ [confirm] ──▶ data-p
 | `linear-fetcher` | Pull ticket bodies, comments, attachments | Tracker MCP | `01-fetch.json` |
 | `test-triage` | Decide test/skip per ticket; cluster into units; infer user role | `01-fetch.json` | `02-triage.json` |
 | `test-data-planner` | Decide create-fresh vs reuse-existing case per unit; pick fixtures by event-type coverage; auto-add manifest entries via Drive search | `02-triage.json`, GitHub MCP, `fixtures/manifest.json` | `02b-data-plan.json` |
-| `test-strategist` | Read each linked PR's diff and write a Requirement Spec grounded in shipped code; bind data_setup to the data plan | `02b-data-plan.json`, GitHub MCP | `03-spec-<unit>.md` + `.json` sidecar |
+| `test-strategist` | Read each linked PR's diff; run a three-pass gate scan (direct flag refs → MobX/store getter wrappers → lazy imports) to classify each gate as a feature flag or a data gate; write a Requirement Spec grounded in shipped code; bind data_setup to the data plan | `02b-data-plan.json`, GitHub MCP | `03-spec-<unit>.md` + `.json` sidecar |
 | `test-executor` | Drive Chrome step-by-step; record every action; evaluate Then-clauses. **In-context runbook, not a sub-agent** — driven by the orchestrator's main session because Chrome DevTools MCP tools are deferred and don't propagate to spawned sub-agents. | `03-spec-<unit>.json`, `02b-data-plan.json`, Chrome DevTools MCP | `trace.jsonl`, `screenshots/`, `result.json`, `generated.spec.ts` |
-| `linear-reporter` | Post a comment to each ticket with the result + screenshots. Two modes: per-unit (one comment per ticket as each unit finishes) and aggregate (writes `05-summary.md` at end of run) | `result.json` | tracker comment + `05-summary.md` |
+| `linear-reporter` | Post a comment to each ticket with the result + screenshots. Reads `prompts/linear-comment-template.md` before composing every comment to enforce a consistent format. Two modes: per-unit (one comment per ticket as each unit finishes) and aggregate (writes `05-summary.md` at end of run) | `result.json`, `prompts/linear-comment-template.md` | tracker comment + `05-summary.md` |
 | `portal-archiver` | (Manual) Adapt `generated.spec.ts` to your Playwright repo's conventions on a branch | `generated.spec.ts` | branch in `<your-playwright-repo>` |
 
 ### Confidence gating
@@ -177,6 +177,7 @@ CLAUDE.md                # operating manual the agents read on every session
 - **Spec is grounded in PR diffs, not ticket prose.** When the ticket promises X but the PR doesn't ship X, that's an Open question, not a scenario.
 - **No reload during a scenario unless the spec demands it.** Reload destroys evidence of "things that should update live but didn't"; that class of bug needs an explicit non-reload observation first.
 - **No production writes outside the test tenant.** Configured per-env in `test-env.local.json`.
+- **Feature flags and data gates are classified, not guessed.** The strategist runs a three-pass scan of every linked PR diff to separate localStorage-override flags (handled by `/toggle-feature-flag`) from data gates like `job_meta.ai_first` (handled by case-creation). Conflating the two causes silent test failures.
 - **Tracker-side relationships are the human owner's job.** This agent posts comments and nothing else — never `relatedTo` / `blocks` / `parentId`. Some trackers (e.g. Linear) auto-create "related issue" backlinks from any ticket-id text in a comment body, so cross-ticket workflow context stays in local `05-summary.md`, never in the comment.
 
 Full operating manual for agent-side rules: **[CLAUDE.md](./CLAUDE.md)**.

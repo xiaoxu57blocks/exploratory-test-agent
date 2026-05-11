@@ -54,9 +54,9 @@
 | `linear-fetcher` | 拉取工单正文、评论、附件 | 工单 MCP | `01-fetch.json` |
 | `test-triage` | 决定每个工单要不要测；把工单聚成单元；推断用户角色 | `01-fetch.json` | `02-triage.json` |
 | `test-data-planner` | 决定每个单元是新建 case 还是复用 case；按 event-type 覆盖度选 fixture；必要时通过 Drive 搜索补全 manifest | `02-triage.json`、GitHub MCP、`fixtures/manifest.json` | `02b-data-plan.json` |
-| `test-strategist` | 读关联 PR 的 diff，写一份基于"实际发布代码"的 Requirement Spec；把 data_setup 绑到 data plan | `02b-data-plan.json`、GitHub MCP | `03-spec-<unit>.md` 加 `.json` 副本 |
+| `test-strategist` | 读关联 PR 的 diff；执行三轮 gate 扫描（直接 flag 引用 → MobX/store getter 包装 → lazy import）将每个 gate 归类为 feature flag 或 data gate；写一份基于"实际发布代码"的 Requirement Spec；把 data_setup 绑到 data plan | `02b-data-plan.json`、GitHub MCP | `03-spec-<unit>.md` 加 `.json` 副本 |
 | `test-executor` | 一步步驱动 Chrome；记录每一个动作；评估每个 Then。**这是 in-context runbook，不是 sub-agent** —— 由 orchestrator 在主会话中执行，因为 Chrome DevTools MCP 工具是 deferred 的，不会传递给 spawn 出来的子 agent。 | `03-spec-<unit>.json`、`02b-data-plan.json`、Chrome DevTools MCP | `trace.jsonl`、`screenshots/`、`result.json`、`generated.spec.ts` |
-| `linear-reporter` | 在每个工单上发评论，附结果和截图。两种模式：per-unit（一个单元跑完就发一条）和聚合（运行结束时写 `05-summary.md`） | `result.json` | 工单评论 + `05-summary.md` |
+| `linear-reporter` | 在每个工单上发评论，附结果和截图。每次构建评论前读取 `prompts/linear-comment-template.md` 以保证格式一致。两种模式：per-unit（一个单元跑完就发一条）和聚合（运行结束时写 `05-summary.md`） | `result.json`、`prompts/linear-comment-template.md` | 工单评论 + `05-summary.md` |
 | `portal-archiver` | （手动触发）把 `generated.spec.ts` 适配进你的 Playwright 仓库的目录约定，落到一个分支上 | `generated.spec.ts` | `<your-playwright-repo>` 上的分支 |
 
 ### 置信度门控
@@ -176,6 +176,7 @@ CLAUDE.md                # 每次会话 agent 都会读的运行手册
 - **Spec 以 PR diff 为准，不以工单文本为准。** 当工单承诺 X 但 PR 没有发布 X，那是 Open question，不是测试场景。
 - **场景执行中不许 reload，除非 spec 显式要求。** Reload 会抹掉"应该实时更新但没更新"的证据；这一类 bug 需要先有一次"不刷新就观察"的确认。
 - **测试租户之外不允许任何 production 写入。** 在 `test-env.local.json` 里按环境配置。
+- **Feature flag 和 data gate 要明确区分，不能靠猜。** strategist 对每个关联 PR diff 执行三轮扫描，区分 localStorage override 类 flag（由 `/toggle-feature-flag` 处理）和 `job_meta.ai_first` 这类 data gate（由创建 case 时的类型决定）。把两者混淆会导致测试静默失败。
 - **工单系统里的关系字段是工单 owner 的事。** 本 Agent 只发评论，仅此而已 —— 永远不动 `relatedTo` / `blocks` / `parentId`。某些工单系统（如 Linear）会自动从评论正文里的工单 ID 文本生成 "related issue" 反向链接，所以跨工单的 workflow 上下文只放在本地 `05-summary.md` 里，永远不写进评论。
 
 完整的 agent 端运行规则见 **[CLAUDE.md](./CLAUDE.md)**。
